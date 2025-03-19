@@ -1,7 +1,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { CloudUpload, FileSpreadsheet, X, CheckCircle, AlertCircle, FilePdf } from 'lucide-react';
+import { CloudUpload, FileSpreadsheet, X, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -80,7 +80,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const getFileIcon = (filename: string) => {
     const extension = filename.split('.').pop()?.toLowerCase();
     if (extension === 'pdf') {
-      return <FilePdf className="h-5 w-5 text-primary" />;
+      return <FileText className="h-5 w-5 text-primary" />;
     }
     return <FileSpreadsheet className="h-5 w-5 text-primary" />;
   };
