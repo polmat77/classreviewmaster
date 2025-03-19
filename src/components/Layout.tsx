@@ -14,19 +14,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const currentPath = location.pathname;
   
   const steps = [
-    { id: 1, name: 'Chargement', path: '/' },
-    { id: 2, name: 'Analyse', path: '/analyse' },
-    { id: 3, name: 'Appréciation générale', path: '/appreciation-generale' },
-    { id: 4, name: 'Appréciations individuelles', path: '/appreciations-individuelles' },
-    { id: 5, name: 'Rapport final', path: '/rapport' },
+    { id: 1, name: 'Analyse des résultats', path: '/' },
+    { id: 2, name: 'Appréciation générale de classe', path: '/appreciation-generale' },
+    { id: 3, name: 'Appréciations individuelles', path: '/appreciations-individuelles' },
+    { id: 4, name: 'Rapport final', path: '/rapport' },
   ];
   
   // Find current step
   const currentStep = steps.findIndex(step => step.path === currentPath) + 1;
+  const currentStepIndex = Math.max(0, currentStep - 1);
   
   // Previous and next navigation
   const prevStep = currentStep > 1 ? steps[currentStep - 2].path : null;
-  const nextStep = currentStep < 5 ? steps[currentStep].path : null;
+  const nextStep = currentStep < steps.length ? steps[currentStep].path : null;
   
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -48,7 +48,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       
       <div className="app-container flex-1 flex flex-col">
         <StepIndicator 
-          steps={steps.map(s => s.name)} 
+          steps={steps} 
           currentStep={currentStep} 
           className="my-6"
         />

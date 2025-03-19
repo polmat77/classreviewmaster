@@ -1,9 +1,16 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
+
+interface Step {
+  id: number;
+  name: string;
+  path: string;
+}
 
 interface StepIndicatorProps {
-  steps: string[];
+  steps: Step[];
   currentStep: number;
   className?: string;
 }
@@ -25,28 +32,31 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
           
           return (
             <React.Fragment key={i}>
-              <div className="relative flex flex-col items-center">
+              <Link 
+                to={step.path}
+                className="relative flex flex-col items-center group"
+              >
                 <div 
                   className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full border-2 bg-background z-10 transition-all duration-300",
+                    "flex h-12 w-12 items-center justify-center rounded-full border-2 bg-background z-10 transition-all duration-300",
                     status === 'complete' ? "border-primary bg-primary text-primary-foreground" : "",
                     status === 'current' ? "border-primary text-primary" : "",
-                    status === 'upcoming' ? "border-muted-foreground/30 text-muted-foreground/70" : "",
+                    status === 'upcoming' ? "border-muted-foreground/30 text-muted-foreground/70 hover:border-muted-foreground/50 hover:text-muted-foreground" : "",
                   )}
                 >
                   {i + 1}
                 </div>
                 <p 
                   className={cn(
-                    "mt-2 text-xs font-medium transition-colors",
+                    "mt-2 text-sm font-medium text-center transition-colors max-w-28",
                     status === 'complete' ? "text-primary" : "",
                     status === 'current' ? "text-foreground" : "",
-                    status === 'upcoming' ? "text-muted-foreground/70" : "",
+                    status === 'upcoming' ? "text-muted-foreground/70 group-hover:text-muted-foreground" : "",
                   )}
                 >
-                  {step}
+                  {step.name}
                 </p>
-              </div>
+              </Link>
               
               {i < steps.length - 1 && (
                 <div 
@@ -62,10 +72,24 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
       </div>
       
       <div className="sm:hidden">
-        <div className="flex items-center justify-center">
-          <p className="text-sm font-medium">
-            Étape {currentStep} sur {steps.length}: <span className="text-primary">{steps[currentStep - 1]}</span>
-          </p>
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
+          {steps.map((step, i) => {
+            const isActive = i + 1 === currentStep;
+            return (
+              <Link 
+                key={i}
+                to={step.path}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                  isActive 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                )}
+              >
+                {i + 1}. {step.name}
+              </Link>
+            );
+          })}
         </div>
         <div className="mt-2 overflow-hidden rounded-full bg-muted-foreground/30">
           <div 

@@ -1,7 +1,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { CloudUpload, FileSpreadsheet, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { CloudUpload, FileSpreadsheet, X, CheckCircle, AlertCircle, FilePdf } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -16,7 +16,7 @@ interface FileUploaderProps {
 
 const FileUploader: React.FC<FileUploaderProps> = ({
   onFilesAccepted,
-  acceptedFileTypes = ['.csv', '.xlsx', '.xls'],
+  acceptedFileTypes = ['.csv', '.xlsx', '.xls', '.pdf'],
   maxFiles = 5,
   label = "Importer vos fichiers",
   description = "Glissez-déposez vos fichiers ou cliquez pour parcourir",
@@ -69,12 +69,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         '.csv': { 'text/csv': [] },
         '.xlsx': { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [] },
         '.xls': { 'application/vnd.ms-excel': [] },
+        '.pdf': { 'application/pdf': [] },
       };
       return { ...acc, ...(mimeTypes[type as keyof typeof mimeTypes] || {}) };
     }, {}),
     maxFiles,
     multiple: true,
   });
+  
+  const getFileIcon = (filename: string) => {
+    const extension = filename.split('.').pop()?.toLowerCase();
+    if (extension === 'pdf') {
+      return <FilePdf className="h-5 w-5 text-primary" />;
+    }
+    return <FileSpreadsheet className="h-5 w-5 text-primary" />;
+  };
   
   return (
     <div className={cn("space-y-4", className)}>
@@ -129,7 +138,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-card shadow-subtle">
                 <div className="flex items-center overflow-hidden">
                   <div className="p-2 rounded-md bg-secondary">
-                    <FileSpreadsheet className="h-5 w-5 text-primary" />
+                    {getFileIcon(file.name)}
                   </div>
                   <div className="ml-3 truncate">
                     <p className="text-sm font-medium truncate">{file.name}</p>
@@ -165,7 +174,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             <h4 className="font-medium">Comment exporter mes données depuis PRONOTE ?</h4>
             <p className="text-muted-foreground mt-1">
               Dans PRONOTE, accédez à l'onglet "Notes", puis cliquez sur l'icône d'export (flèche vers le haut) 
-              et sélectionnez "Exporter au format Excel". Choisissez les données à inclure et cliquez sur "Exporter".
+              et sélectionnez "Exporter au format Excel" ou "PDF". Choisissez les données à inclure et cliquez sur "Exporter".
             </p>
           </div>
         </div>

@@ -10,7 +10,7 @@ const AppreciationGenerale = () => {
     <Layout>
       <div className="space-y-8">
         <div>
-          <h1 className="section-title">Appréciation générale</h1>
+          <h1 className="section-title">Appréciation générale de classe</h1>
           <p className="section-description">
             Générez et personnalisez une appréciation globale pour l'ensemble de la classe.
           </p>
