@@ -67,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <span>Précédent</span>
             </Link>
           ) : (
-            <div /> {/* Empty placeholder */}
+            <div /> /* Empty placeholder */
           )}
           
           {nextStep && (
