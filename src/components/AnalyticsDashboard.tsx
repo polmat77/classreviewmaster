@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { ChevronUp, ChevronDown, Minus, BarChart3, TrendingUp } from 'lucide-react';
+import AnalysisUploader from './AnalysisUploader';
 
 interface AnalyticsDashboardProps {
   data?: any;
@@ -46,6 +47,8 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   data = mockData, 
   className 
 }) => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   const getChangeColor = (change: number) => {
     if (change > 0.2) return 'text-green-500';
     if (change < -0.2) return 'text-red-500';
@@ -57,9 +60,19 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     if (change < -0.2) return <ChevronDown className="h-4 w-4" />;
     return <Minus className="h-4 w-4" />;
   };
+
+  const handleFilesUploaded = () => {
+    // Trigger a refresh of the component to reflect new data
+    setRefreshTrigger(prev => prev + 1);
+  };
   
   return (
     <div className={cn("space-y-6", className)}>
+      <div className="glass-panel p-5 space-y-4 animate-slide-up" style={{ "--index": 0 } as React.CSSProperties}>
+        <h3 className="text-lg font-medium">Importer des données pour l'analyse</h3>
+        <AnalysisUploader onFilesUploaded={handleFilesUploaded} />
+      </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="glass-panel p-5 space-y-4 col-span-2 animate-slide-up" style={{ "--index": 1 } as React.CSSProperties}>
           <div className="flex items-center justify-between">

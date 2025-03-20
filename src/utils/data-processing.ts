@@ -1,4 +1,3 @@
-
 // In a real application, this would contain functions for processing CSV/Excel data
 // For now, we'll add placeholder functions
 
@@ -18,8 +17,19 @@ export const processGradeFiles = async (files: File[]) => {
   
   // Check file types to provide more realistic mock data
   const hasPreviousReports = files.some(f => f.name.includes('précédent') && f.name.endsWith('.pdf'));
-  const hasPreviousGrades = files.some(f => 
-    (f.name.endsWith('.csv') || f.name.endsWith('.xlsx') || f.name.endsWith('.xls')));
+  
+  // Look for a grades table in the global state or storage
+  // In a real implementation, we would retrieve this from a global state manager
+  // For now, we'll check localStorage for mock data
+  let hasPreviousGrades = false;
+  try {
+    const storedGradeFiles = localStorage.getItem('previousGradeTableFiles');
+    if (storedGradeFiles) {
+      hasPreviousGrades = JSON.parse(storedGradeFiles).length > 0;
+    }
+  } catch (e) {
+    console.error('Error checking for previous grade files:', e);
+  }
   
   // For now, return mock data structure
   return {
@@ -163,3 +173,36 @@ export const compareTerms = (currentData: any, previousData: any) => {
     strengths: ["SVT", "Histoire-Géographie"]
   };
 };
+
+/**
+ * Save previous term grade files to localStorage
+ * @param files The uploaded files containing previous term grades
+ */
+export const savePreviousGradeFiles = (files: File[]) => {
+  try {
+    // In a real app, we would use a proper state management solution
+    // For this demo, we'll use localStorage for simplicity
+    localStorage.setItem('previousGradeTableFiles', JSON.stringify(
+      files.map(f => ({ name: f.name, type: f.type, size: f.size }))
+    ));
+    return true;
+  } catch (e) {
+    console.error('Error saving previous grade files:', e);
+    return false;
+  }
+};
+
+/**
+ * Get previous term grade files from localStorage
+ * @returns Information about the saved files
+ */
+export const getPreviousGradeFiles = () => {
+  try {
+    const storedFiles = localStorage.getItem('previousGradeTableFiles');
+    return storedFiles ? JSON.parse(storedFiles) : [];
+  } catch (e) {
+    console.error('Error retrieving previous grade files:', e);
+    return [];
+  }
+};
+

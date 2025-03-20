@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 const AppreciationGenerale = () => {
   const [currentClassReportFiles, setCurrentClassReportFiles] = useState<File[]>([]);
   const [previousClassReportFiles, setPreviousClassReportFiles] = useState<File[]>([]);
-  const [previousGradeTableFiles, setPreviousGradeTableFiles] = useState<File[]>([]);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -23,10 +22,6 @@ const AppreciationGenerale = () => {
     setPreviousClassReportFiles(files);
   };
 
-  const handlePreviousGradeTableUpload = (files: File[]) => {
-    setPreviousGradeTableFiles(files);
-  };
-
   const analyzeFiles = async () => {
     if (currentClassReportFiles.length === 0) {
       toast.error("Veuillez importer le bulletin de classe actuel");
@@ -36,8 +31,8 @@ const AppreciationGenerale = () => {
     setIsAnalyzing(true);
     try {
       // In a real implementation, you would send these files to your backend or API
-      // Here we're using our mock processor
-      const allFiles = [...currentClassReportFiles, ...previousClassReportFiles, ...previousGradeTableFiles];
+      // Here we're using our mock processor - removing the previous grade table files
+      const allFiles = [...currentClassReportFiles, ...previousClassReportFiles];
       const data = await processGradeFiles(allFiles);
       setAnalysisData(data);
       toast.success("Analyse des bulletins terminée");
@@ -90,20 +85,6 @@ const AppreciationGenerale = () => {
                     maxFiles={1}
                     label="Importer un bulletin précédent"
                     description="Document PDF d'une période précédente"
-                  />
-                </div>
-                
-                <div>
-                  <h3 className="text-base font-medium mb-2">Tableau des notes précédent (optionnel)</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Importez un tableau des notes d'une période précédente pour une analyse plus approfondie de l'évolution.
-                  </p>
-                  <FileUploader 
-                    onFilesAccepted={handlePreviousGradeTableUpload}
-                    acceptedFileTypes={['.csv', '.xlsx', '.xls']}
-                    maxFiles={1}
-                    label="Importer un tableau des notes"
-                    description="Fichier Excel ou CSV contenant les notes"
                   />
                 </div>
                 
