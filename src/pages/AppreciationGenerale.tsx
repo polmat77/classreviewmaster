@@ -1,26 +1,139 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
-import { KeyRound, Lightbulb, AlertCircle } from 'lucide-react';
+import FileUploader from '@/components/FileUploader';
+import { KeyRound, Lightbulb, AlertCircle, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { processGradeFiles } from '@/utils/data-processing';
+import { toast } from 'sonner';
 
 const AppreciationGenerale = () => {
+  const [currentClassReportFiles, setCurrentClassReportFiles] = useState<File[]>([]);
+  const [previousClassReportFiles, setPreviousClassReportFiles] = useState<File[]>([]);
+  const [previousGradeTableFiles, setPreviousGradeTableFiles] = useState<File[]>([]);
+  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const handleCurrentReportUpload = (files: File[]) => {
+    setCurrentClassReportFiles(files);
+  };
+
+  const handlePreviousReportUpload = (files: File[]) => {
+    setPreviousClassReportFiles(files);
+  };
+
+  const handlePreviousGradeTableUpload = (files: File[]) => {
+    setPreviousGradeTableFiles(files);
+  };
+
+  const analyzeFiles = async () => {
+    if (currentClassReportFiles.length === 0) {
+      toast.error("Veuillez importer le bulletin de classe actuel");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      // In a real implementation, you would send these files to your backend or API
+      // Here we're using our mock processor
+      const allFiles = [...currentClassReportFiles, ...previousClassReportFiles, ...previousGradeTableFiles];
+      const data = await processGradeFiles(allFiles);
+      setAnalysisData(data);
+      toast.success("Analyse des bulletins terminée");
+    } catch (error) {
+      console.error('Error analyzing files:', error);
+      toast.error("Erreur lors de l'analyse des fichiers");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   return (
     <Layout>
       <div className="space-y-8">
         <div>
           <h1 className="section-title">Appréciation générale de classe</h1>
           <p className="section-description">
-            Générez et personnalisez une appréciation globale pour l'ensemble de la classe.
+            Générez et personnalisez une appréciation globale pour l'ensemble de la classe basée sur l'analyse des données actuelles et historiques.
           </p>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="glass-panel p-5 space-y-5">
+              <h2 className="text-lg font-medium">Importation des documents</h2>
+              
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-base font-medium mb-2">Bulletin de classe actuel</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Importez le bulletin de la classe avec les appréciations des enseignants pour la période actuelle.
+                  </p>
+                  <FileUploader 
+                    onFilesAccepted={handleCurrentReportUpload}
+                    acceptedFileTypes={['.pdf']}
+                    maxFiles={1}
+                    label="Importer le bulletin de classe actuel"
+                    description="Le document PDF contenant les appréciations des enseignants"
+                  />
+                </div>
+                
+                <div>
+                  <h3 className="text-base font-medium mb-2">Bulletin de classe précédent (optionnel)</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Importez un bulletin de classe d'une période précédente pour permettre une analyse comparative.
+                  </p>
+                  <FileUploader 
+                    onFilesAccepted={handlePreviousReportUpload}
+                    acceptedFileTypes={['.pdf']}
+                    maxFiles={1}
+                    label="Importer un bulletin précédent"
+                    description="Document PDF d'une période précédente"
+                  />
+                </div>
+                
+                <div>
+                  <h3 className="text-base font-medium mb-2">Tableau des notes précédent (optionnel)</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Importez un tableau des notes d'une période précédente pour une analyse plus approfondie de l'évolution.
+                  </p>
+                  <FileUploader 
+                    onFilesAccepted={handlePreviousGradeTableUpload}
+                    acceptedFileTypes={['.csv', '.xlsx', '.xls']}
+                    maxFiles={1}
+                    label="Importer un tableau des notes"
+                    description="Fichier Excel ou CSV contenant les notes"
+                  />
+                </div>
+                
+                <button
+                  onClick={analyzeFiles}
+                  disabled={isAnalyzing || currentClassReportFiles.length === 0}
+                  className={cn(
+                    "button-primary w-full flex items-center justify-center space-x-2 py-3",
+                    (isAnalyzing || currentClassReportFiles.length === 0) && "opacity-70 cursor-not-allowed"
+                  )}
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <span className="animate-spin mr-2">⌛</span>
+                      Analyse en cours...
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Analyser les documents
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            
             <AppreciationGenerator 
               maxChars={255}
               type="class"
+              analysisData={analysisData}
             />
           </div>
           
@@ -64,6 +177,11 @@ const AppreciationGenerale = () => {
                 <p>
                   <span className="font-medium">Personnalisez :</span> Adaptez le ton selon 
                   le profil global de la classe et son évolution.
+                </p>
+                
+                <p>
+                  <span className="font-medium">Comparez :</span> Utilisez les données historiques 
+                  pour souligner les progressions ou les points de vigilance.
                 </p>
               </div>
             </div>

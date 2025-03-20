@@ -11,10 +11,15 @@ export const processGradeFiles = async (files: File[]) => {
   console.log('Processing files:', files);
   
   // In a real implementation, this would:
-  // 1. Parse CSV/Excel files
+  // 1. Parse CSV/Excel files and PDF documents
   // 2. Extract student data, grades, subject information
   // 3. Organize data for analysis
   // 4. Return structured data
+  
+  // Check file types to provide more realistic mock data
+  const hasPreviousReports = files.some(f => f.name.includes('précédent') && f.name.endsWith('.pdf'));
+  const hasPreviousGrades = files.some(f => 
+    (f.name.endsWith('.csv') || f.name.endsWith('.xlsx') || f.name.endsWith('.xls')));
   
   // For now, return mock data structure
   return {
@@ -36,12 +41,12 @@ export const processGradeFiles = async (files: File[]) => {
     previousTerms: [
       {
         term: "Trimestre 2",
-        classAverage: 12.4,
+        classAverage: hasPreviousReports || hasPreviousGrades ? 12.4 : 13.0,
         // ... more data
       },
       {
         term: "Trimestre 1",
-        classAverage: 11.8,
+        classAverage: hasPreviousReports || hasPreviousGrades ? 11.8 : 12.5,
         // ... more data
       }
     ],
@@ -51,7 +56,19 @@ export const processGradeFiles = async (files: File[]) => {
       average: 8,
       struggling: 3,
       veryStruggling: 0
-    }
+    },
+    // Mock different analysis based on uploaded files
+    analysisPoints: [
+      hasPreviousReports ? 
+        "Progression constante de la classe depuis le début de l'année" : 
+        "Bon niveau général de la classe ce trimestre",
+      hasPreviousGrades ? 
+        "Amélioration notable en mathématiques par rapport au trimestre précédent" : 
+        "Points forts en SVT et Histoire-Géographie",
+      hasPreviousReports && hasPreviousGrades ?
+        "Ambiance de travail en nette amélioration depuis le premier trimestre" :
+        "Ambiance de travail globalement positive"
+    ]
   };
 };
 
@@ -88,5 +105,61 @@ export const generateReportData = (classData: any) => {
       weakestSubject: "Mathématiques", // Would calculate this from real data
     },
     // ... more report data
+  };
+};
+
+/**
+ * Extract teacher comments from PDF files
+ * @param file PDF file containing teacher comments
+ * @returns Structured data with extracted comments
+ */
+export const extractTeacherComments = async (file: File) => {
+  // In a real implementation, this would use a PDF parsing library
+  // to extract text from the document and find teacher comments
+  
+  console.log(`Extracting comments from ${file.name}`);
+  
+  // Return mock data
+  return {
+    comments: [
+      {
+        subject: "Français",
+        teacher: "Mme Dupont",
+        comment: "Classe attentive et participative. Les élèves montrent un intérêt croissant pour la littérature."
+      },
+      {
+        subject: "Mathématiques",
+        teacher: "M. Martin",
+        comment: "Niveau hétérogène mais l'ambiance de travail est positive. Les notions fondamentales sont acquises."
+      },
+      {
+        subject: "Histoire-Géographie",
+        teacher: "Mme Laurent",
+        comment: "Bonne participation orale. Les méthodes d'analyse de documents sont maîtrisées."
+      }
+    ]
+  };
+};
+
+/**
+ * Compare current and previous term data
+ * @param currentData Current term data
+ * @param previousData Previous term data
+ * @returns Comparative analysis
+ */
+export const compareTerms = (currentData: any, previousData: any) => {
+  // In a real implementation, this would compare various metrics
+  
+  return {
+    averageChange: currentData.classAverage - previousData.classAverage,
+    subjectChanges: currentData.subjects.map((subject: any) => {
+      const prevSubject = previousData.subjects.find((s: any) => s.name === subject.name);
+      return {
+        name: subject.name,
+        change: prevSubject ? subject.average - prevSubject.average : 0
+      };
+    }),
+    improvementAreas: ["Mathématiques", "Anglais"],
+    strengths: ["SVT", "Histoire-Géographie"]
   };
 };
