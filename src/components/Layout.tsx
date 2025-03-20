@@ -14,7 +14,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const currentPath = location.pathname;
   
   const steps = [
-    { id: 1, name: 'Analyse des résultats', path: '/' },
+    { id: 1, name: 'Analyse des résultats', path: '/dashboard' },
     { id: 2, name: 'Appréciation générale de classe', path: '/appreciation-generale' },
     { id: 3, name: 'Appréciations individuelles', path: '/appreciations-individuelles' },
     { id: 4, name: 'Rapport final', path: '/rapport' },
@@ -87,7 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       
       <footer className="border-t border-border/40 py-6 bg-secondary/50">
         <div className="app-container text-center text-sm text-muted-foreground">
-          <p>© 2023 BulletinPro — Simplifiez l'analyse de vos bulletins scolaires</p>
+          <p>© {new Date().getFullYear()} BulletinPro — Simplifiez l'analyse de vos bulletins scolaires</p>
         </div>
       </footer>
     </div>

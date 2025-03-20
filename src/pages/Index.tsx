@@ -98,10 +98,10 @@ const Index = () => {
             
             <div className="flex justify-end">
               <Link 
-                to="/analyse" 
+                to="/appreciation-generale" 
                 className="button-primary flex items-center space-x-2"
               >
-                <span>Continuer vers l'analyse détaillée</span>
+                <span>Continuer vers l'appréciation générale</span>
                 <ChevronRight className="h-4 w-4" />
               </Link>
             </div>
