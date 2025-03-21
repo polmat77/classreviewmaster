@@ -3,26 +3,52 @@ import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
-import { ChevronRight, Info, FileSpreadsheet, Upload } from 'lucide-react';
+import { ChevronRight, Info, FileSpreadsheet, Upload, Table, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { processGradeFiles } from '@/utils/data-processing';
+import { processGradeFiles, savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
+import { toast } from 'sonner';
 
 const Index = () => {
   const [hasUploaded, setHasUploaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [processedData, setProcessedData] = useState<any>(null);
+  const [currentGradeFiles, setCurrentGradeFiles] = useState<File[]>([]);
+  const [previousGradeFiles, setPreviousGradeFiles] = useState<File[]>([]);
   
-  const handleFilesAccepted = async (files: File[]) => {
+  const handleCurrentFilesAccepted = (files: File[]) => {
+    setCurrentGradeFiles(files);
+    
+    // If we already have previous files, automatically process both
+    if (previousGradeFiles.length > 0 || getPreviousGradeFiles().length > 0) {
+      processFiles(files, previousGradeFiles);
+    }
+  };
+  
+  const handlePreviousFilesAccepted = (files: File[]) => {
+    setPreviousGradeFiles(files);
+    if (savePreviousGradeFiles(files)) {
+      toast.success("Tableau des notes précédent enregistré");
+      
+      // If we already have current files, automatically process both
+      if (currentGradeFiles.length > 0) {
+        processFiles(currentGradeFiles, files);
+      }
+    }
+  };
+  
+  const processFiles = async (current: File[], previous: File[]) => {
     setIsLoading(true);
     
     try {
       // In a real app, this would actually process the files
-      const data = await processGradeFiles(files);
+      const data = await processGradeFiles([...current, ...previous]);
       setProcessedData(data);
       setHasUploaded(true);
+      toast.success("Analyse des fichiers terminée");
     } catch (error) {
       console.error('Error processing files:', error);
+      toast.error("Erreur lors du traitement des fichiers");
     } finally {
       setIsLoading(false);
     }
@@ -34,17 +60,81 @@ const Index = () => {
         <div>
           <h1 className="section-title">Chargement des moyennes</h1>
           <p className="section-description">
-            Importez vos fichiers Excel ou CSV pour commencer l'analyse.
+            Importez vos fichiers Excel, CSV ou PDF pour commencer l'analyse.
           </p>
+        </div>
+        
+        <div className="glass-panel p-5 space-y-6">
+          <h2 className="text-lg font-medium">Fichiers de notes</h2>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-medium">Trimestre actuel</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">
+                Importez les notes du trimestre en cours pour analyse
+              </p>
+              <FileUploader 
+                onFilesAccepted={handleCurrentFilesAccepted}
+                acceptedFileTypes={['.csv', '.xlsx', '.xls', '.pdf']}
+                maxFiles={3}
+                label="Importer les notes du trimestre actuel"
+                description="Glissez-déposez vos fichiers Excel/CSV/PDF depuis PRONOTE"
+              />
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Table className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-medium">Trimestres précédents (optionnel)</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">
+                Importez les notes des trimestres précédents pour une analyse comparative
+              </p>
+              <FileUploader 
+                onFilesAccepted={handlePreviousFilesAccepted}
+                acceptedFileTypes={['.csv', '.xlsx', '.xls', '.pdf']}
+                maxFiles={3}
+                label="Importer les notes des trimestres précédents"
+                description="Fichiers Excel, CSV ou PDF des périodes antérieures"
+              />
+            </div>
+          </div>
+          
+          <div className="bg-secondary/30 p-4 rounded-lg">
+            <div className="flex space-x-3">
+              <Info className="h-5 w-5 text-primary flex-shrink-0" />
+              <div className="text-sm">
+                <h4 className="font-medium">Conseil pour l'analyse</h4>
+                <p className="text-muted-foreground mt-1">
+                  Pour une analyse plus complète, importez à la fois les notes actuelles et celles des trimestres précédents.
+                  L'application peut analyser plusieurs formats de fichiers, y compris les PDFs exportés depuis PRONOTE.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
-            <FileUploader 
-              onFilesAccepted={handleFilesAccepted}
-              label="Importer vos fichiers de notes"
-              description="Glissez-déposez vos fichiers Excel/CSV depuis PRONOTE ou cliquez pour parcourir"
-            />
+            {(currentGradeFiles.length === 0 && !hasUploaded) && (
+              <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
+                <Upload className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Aucun fichier importé</h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Importez vos fichiers de notes en utilisant le formulaire ci-dessus pour commencer l'analyse.
+                </p>
+              </div>
+            )}
+            
+            {(currentGradeFiles.length > 0 || hasUploaded) && (
+              <div className={cn("space-y-6", isLoading && "opacity-60 pointer-events-none")}>
+                <h2 className="text-xl font-medium">Analyse préliminaire</h2>
+                <AnalyticsDashboard data={processedData} />
+              </div>
+            )}
           </div>
           
           <div className="glass-panel p-5 space-y-4">
@@ -58,7 +148,7 @@ const Index = () => {
                 <div>
                   <h4 className="text-sm font-medium">Fichiers acceptés</h4>
                   <p className="text-xs text-muted-foreground">
-                    Format Excel (.xlsx, .xls) ou CSV (.csv) exportés depuis PRONOTE
+                    Format Excel (.xlsx, .xls), CSV (.csv) ou PDF (.pdf) exportés depuis PRONOTE
                   </p>
                 </div>
               </div>
@@ -91,20 +181,14 @@ const Index = () => {
         </div>
         
         {hasUploaded && (
-          <div className={cn("space-y-6", isLoading && "opacity-60 pointer-events-none")}>
-            <h2 className="text-xl font-medium">Analyse préliminaire</h2>
-            
-            <AnalyticsDashboard />
-            
-            <div className="flex justify-end">
-              <Link 
-                to="/appreciation-generale" 
-                className="button-primary flex items-center space-x-2"
-              >
-                <span>Continuer vers l'appréciation générale</span>
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
+          <div className="flex justify-end">
+            <Link 
+              to="/appreciation-generale" 
+              className="button-primary flex items-center space-x-2"
+            >
+              <span>Continuer vers l'appréciation générale</span>
+              <ChevronRight className="h-4 w-4" />
+            </Link>
           </div>
         )}
       </div>

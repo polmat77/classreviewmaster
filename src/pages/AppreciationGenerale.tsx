@@ -10,16 +10,11 @@ import { toast } from 'sonner';
 
 const AppreciationGenerale = () => {
   const [currentClassReportFiles, setCurrentClassReportFiles] = useState<File[]>([]);
-  const [previousClassReportFiles, setPreviousClassReportFiles] = useState<File[]>([]);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleCurrentReportUpload = (files: File[]) => {
     setCurrentClassReportFiles(files);
-  };
-
-  const handlePreviousReportUpload = (files: File[]) => {
-    setPreviousClassReportFiles(files);
   };
 
   const analyzeFiles = async () => {
@@ -30,10 +25,7 @@ const AppreciationGenerale = () => {
 
     setIsAnalyzing(true);
     try {
-      // In a real implementation, you would send these files to your backend or API
-      // Here we're using our mock processor - removing the previous grade table files
-      const allFiles = [...currentClassReportFiles, ...previousClassReportFiles];
-      const data = await processGradeFiles(allFiles);
+      const data = await processGradeFiles([...currentClassReportFiles]);
       setAnalysisData(data);
       toast.success("Analyse des bulletins terminée");
     } catch (error) {
@@ -67,24 +59,10 @@ const AppreciationGenerale = () => {
                   </p>
                   <FileUploader 
                     onFilesAccepted={handleCurrentReportUpload}
-                    acceptedFileTypes={['.pdf']}
+                    acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
                     maxFiles={1}
                     label="Importer le bulletin de classe actuel"
                     description="Le document PDF contenant les appréciations des enseignants"
-                  />
-                </div>
-                
-                <div>
-                  <h3 className="text-base font-medium mb-2">Bulletin de classe précédent (optionnel)</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Importez un bulletin de classe d'une période précédente pour permettre une analyse comparative.
-                  </p>
-                  <FileUploader 
-                    onFilesAccepted={handlePreviousReportUpload}
-                    acceptedFileTypes={['.pdf']}
-                    maxFiles={1}
-                    label="Importer un bulletin précédent"
-                    description="Document PDF d'une période précédente"
                   />
                 </div>
                 
@@ -112,9 +90,9 @@ const AppreciationGenerale = () => {
             </div>
             
             <AppreciationGenerator 
-              maxChars={255}
               type="class"
               analysisData={analysisData}
+              maxChars={255}
             />
           </div>
           
