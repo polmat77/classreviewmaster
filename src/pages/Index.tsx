@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
@@ -18,7 +17,6 @@ const Index = () => {
   const [savedPreviousFiles, setSavedPreviousFiles] = useState<any[]>([]);
   
   useEffect(() => {
-    // Check if there are any previously uploaded files
     const files = getPreviousGradeFiles();
     setSavedPreviousFiles(files || []);
     
@@ -29,14 +27,11 @@ const Index = () => {
     console.log("Current files accepted:", files);
     setCurrentGradeFiles(files);
     
-    // Get the latest saved previous files
     const savedFiles = getPreviousGradeFiles();
     
-    // If we have previously saved files or just uploaded previous files, use them
     if ((savedFiles && savedFiles.length > 0) || previousGradeFiles.length > 0) {
       processFiles(files, previousGradeFiles.length > 0 ? previousGradeFiles : []);
     } else {
-      // Process just the current files if no previous files are available
       processFiles(files, []);
     }
   };
@@ -49,7 +44,6 @@ const Index = () => {
       toast.success("Tableau des notes précédent enregistré");
       setSavedPreviousFiles(getPreviousGradeFiles());
       
-      // If we already have current files, automatically process both
       if (currentGradeFiles.length > 0) {
         processFiles(currentGradeFiles, files);
       }
@@ -66,9 +60,8 @@ const Index = () => {
     console.log("Processing files - Current:", current, "Previous:", previous);
     
     try {
-      // In a real app, this would actually process the files
       const data = await processGradeFiles([...current, ...previous]);
-      console.log("Processed data:", data); // Debug log
+      console.log("Processed data:", data);
       
       if (!data) {
         throw new Error("Le traitement des fichiers n'a pas produit de données");
@@ -80,7 +73,7 @@ const Index = () => {
     } catch (error) {
       console.error('Error processing files:', error);
       toast.error("Erreur lors du traitement des fichiers");
-      setHasUploaded(false); // Reset in case of error
+      setHasUploaded(false);
     } finally {
       setIsLoading(false);
     }
@@ -132,19 +125,6 @@ const Index = () => {
                 label="Importer les notes des trimestres précédents"
                 description="Fichiers Excel, CSV ou PDF des périodes antérieures"
               />
-            </div>
-          </div>
-          
-          <div className="bg-secondary/30 p-4 rounded-lg">
-            <div className="flex space-x-3">
-              <Info className="h-5 w-5 text-primary flex-shrink-0" />
-              <div className="text-sm">
-                <h4 className="font-medium">Conseil pour l'analyse</h4>
-                <p className="text-muted-foreground mt-1">
-                  Pour une analyse plus complète, importez à la fois les notes actuelles et celles des trimestres précédents.
-                  L'application peut analyser plusieurs formats de fichiers, y compris les PDFs exportés depuis PRONOTE.
-                </p>
-              </div>
             </div>
           </div>
         </div>
