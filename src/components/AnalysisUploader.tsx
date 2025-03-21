@@ -14,19 +14,36 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({ onFilesUploaded }) 
   
   useEffect(() => {
     // Check if there are any previously uploaded files
-    const files = getPreviousGradeFiles();
-    setSavedFiles(files || []);
+    try {
+      const files = getPreviousGradeFiles();
+      setSavedFiles(Array.isArray(files) ? files : []);
+      console.log("Loaded saved files:", files);
+    } catch (error) {
+      console.error("Error loading previous files:", error);
+      setSavedFiles([]);
+    }
   }, []);
   
   const handlePreviousGradeTableUpload = (files: File[]) => {
-    if (files.length === 0) return;
+    if (!files || files.length === 0) {
+      console.log("No files provided to handlePreviousGradeTableUpload");
+      return;
+    }
     
+    console.log("Handling previous grade table upload:", files);
     setPreviousGradeTableFiles(files);
+    
     try {
       if (savePreviousGradeFiles(files)) {
         toast.success("Tableau des notes précédent enregistré");
-        setSavedFiles(getPreviousGradeFiles());
-        if (onFilesUploaded) onFilesUploaded();
+        const updatedFiles = getPreviousGradeFiles();
+        setSavedFiles(Array.isArray(updatedFiles) ? updatedFiles : []);
+        console.log("Saved files updated:", updatedFiles);
+        
+        if (onFilesUploaded) {
+          console.log("Calling onFilesUploaded callback");
+          onFilesUploaded();
+        }
       }
     } catch (error) {
       console.error("Error saving files:", error);

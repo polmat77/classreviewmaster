@@ -1,3 +1,4 @@
+
 // In a real application, this would contain functions for processing CSV/Excel data
 // For now, we'll add placeholder functions
 
@@ -16,7 +17,7 @@ export const processGradeFiles = async (files: File[]) => {
   // 4. Return structured data
   
   // Check file types to provide more realistic mock data
-  const hasPreviousReports = files.some(f => f.name.includes('précédent') && f.name.endsWith('.pdf'));
+  const hasPreviousReports = files.some(f => f.name.includes('précédent') || f.name.includes('previous') && f.name.endsWith('.pdf'));
   
   // Look for a grades table in the global state or storage
   // In a real implementation, we would retrieve this from a global state manager
@@ -33,6 +34,48 @@ export const processGradeFiles = async (files: File[]) => {
   
   // For now, return mock data structure
   return {
+    averages: [
+      { name: 'T1', moyenne: hasPreviousReports || hasPreviousGrades ? 11.8 : 12.5 },
+      { name: 'T2', moyenne: hasPreviousReports || hasPreviousGrades ? 12.4 : 13.0 },
+      { name: 'T3', moyenne: 13.2 },
+    ],
+    distribution: [
+      { 
+        category: 'Excellent', 
+        count: 5, 
+        color: '#2dd4bf',
+        criteria: '≥ 16/20',
+        characteristics: 'Maîtrise parfaite, excellente autonomie'
+      },
+      { 
+        category: 'Assez bon', 
+        count: 12, 
+        color: '#4ade80',
+        criteria: '14-15,9/20',
+        characteristics: 'Bonne maîtrise, travail régulier'
+      },
+      { 
+        category: 'Moyen', 
+        count: 8, 
+        color: '#facc15',
+        criteria: '10-13,9/20',
+        characteristics: 'Maîtrise partielle, manque de régularité'
+      },
+      { 
+        category: 'En difficulté', 
+        count: 3, 
+        color: '#f87171',
+        criteria: '< 10/20',
+        characteristics: 'Difficultés importantes, lacunes à combler'
+      }
+    ],
+    subjects: [
+      { name: 'Français', current: 12.4, previous: 11.8, change: 0.6 },
+      { name: 'Mathématiques', current: 11.2, previous: 12.1, change: -0.9 },
+      { name: 'Histoire-Géo', current: 13.8, previous: 12.9, change: 0.9 },
+      { name: 'SVT', current: 14.1, previous: 13.5, change: 0.6 },
+      { name: 'Anglais', current: 13.5, previous: 13.6, change: -0.1 },
+    ],
     currentTerm: {
       term: "Trimestre 3",
       classAverage: 13.2,

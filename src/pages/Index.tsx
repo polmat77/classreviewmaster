@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
@@ -15,13 +15,26 @@ const Index = () => {
   const [processedData, setProcessedData] = useState<any>(null);
   const [currentGradeFiles, setCurrentGradeFiles] = useState<File[]>([]);
   const [previousGradeFiles, setPreviousGradeFiles] = useState<File[]>([]);
+  const [savedPreviousFiles, setSavedPreviousFiles] = useState<any[]>([]);
+  
+  useEffect(() => {
+    // Check if there are any previously uploaded files
+    const files = getPreviousGradeFiles();
+    setSavedPreviousFiles(files || []);
+    
+    console.log("Saved previous files on init:", files);
+  }, []);
   
   const handleCurrentFilesAccepted = (files: File[]) => {
+    console.log("Current files accepted:", files);
     setCurrentGradeFiles(files);
     
-    // If we already have previous files, automatically process both
-    if (previousGradeFiles.length > 0 || getPreviousGradeFiles().length > 0) {
-      processFiles(files, previousGradeFiles);
+    // Get the latest saved previous files
+    const savedFiles = getPreviousGradeFiles();
+    
+    // If we have previously saved files or just uploaded previous files, use them
+    if ((savedFiles && savedFiles.length > 0) || previousGradeFiles.length > 0) {
+      processFiles(files, previousGradeFiles.length > 0 ? previousGradeFiles : []);
     } else {
       // Process just the current files if no previous files are available
       processFiles(files, []);
@@ -29,9 +42,12 @@ const Index = () => {
   };
   
   const handlePreviousFilesAccepted = (files: File[]) => {
+    console.log("Previous files accepted:", files);
     setPreviousGradeFiles(files);
+    
     if (savePreviousGradeFiles(files)) {
       toast.success("Tableau des notes précédent enregistré");
+      setSavedPreviousFiles(getPreviousGradeFiles());
       
       // If we already have current files, automatically process both
       if (currentGradeFiles.length > 0) {
@@ -47,11 +63,17 @@ const Index = () => {
     }
 
     setIsLoading(true);
+    console.log("Processing files - Current:", current, "Previous:", previous);
     
     try {
       // In a real app, this would actually process the files
       const data = await processGradeFiles([...current, ...previous]);
       console.log("Processed data:", data); // Debug log
+      
+      if (!data) {
+        throw new Error("Le traitement des fichiers n'a pas produit de données");
+      }
+      
       setProcessedData(data);
       setHasUploaded(true);
       toast.success("Analyse des fichiers terminée");
@@ -129,7 +151,17 @@ const Index = () => {
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
-            {(currentGradeFiles.length === 0 && !hasUploaded) && (
+            {isLoading && (
+              <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                <h3 className="text-lg font-medium mb-2">Traitement en cours...</h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Nous analysons vos fichiers. Veuillez patienter un instant.
+                </p>
+              </div>
+            )}
+            
+            {!isLoading && currentGradeFiles.length === 0 && !hasUploaded && (
               <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
                 <Upload className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium mb-2">Aucun fichier importé</h3>
@@ -139,8 +171,8 @@ const Index = () => {
               </div>
             )}
             
-            {(currentGradeFiles.length > 0 || hasUploaded) && (
-              <div className={cn("space-y-6", isLoading && "opacity-60 pointer-events-none")}>
+            {!isLoading && (currentGradeFiles.length > 0 || hasUploaded) && processedData && (
+              <div className="space-y-6">
                 <h2 className="text-xl font-medium">Analyse préliminaire</h2>
                 <AnalyticsDashboard data={processedData} />
               </div>
@@ -190,7 +222,7 @@ const Index = () => {
           </div>
         </div>
         
-        {hasUploaded && (
+        {hasUploaded && processedData && (
           <div className="flex justify-end">
             <Link 
               to="/appreciation-generale" 

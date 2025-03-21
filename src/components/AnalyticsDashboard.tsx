@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   LineChart, 
   Line, 
@@ -65,9 +65,17 @@ const mockData = {
 };
 
 const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ 
-  data = mockData, 
+  data, 
   className 
 }) => {
+  // Make sure we have valid data or fall back to mock data
+  const dashboardData = data || mockData;
+  
+  // Ensure all required data structures exist
+  const averages = dashboardData.averages || mockData.averages;
+  const distribution = dashboardData.distribution || mockData.distribution;
+  const subjects = dashboardData.subjects || mockData.subjects;
+  
   const getChangeColor = (change: number) => {
     if (change > 0.2) return 'text-green-500';
     if (change < -0.2) return 'text-red-500';
@@ -93,7 +101,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              data={data.averages}
+              data={averages}
               margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -148,7 +156,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.distribution.map((item: any, index: number) => (
+              {distribution.map((item: any, index: number) => (
                 <tr 
                   key={index} 
                   className="hover:bg-secondary/30 transition-colors"
@@ -168,7 +176,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                         <div 
                           className="h-2 rounded-full" 
                           style={{ 
-                            width: `${(item.count / data.distribution.reduce((acc: number, curr: any) => acc + curr.count, 0)) * 100}%`,
+                            width: `${(item.count / distribution.reduce((acc: number, curr: any) => acc + curr.count, 0)) * 100}%`,
                             backgroundColor: item.color 
                           }}
                         ></div>
@@ -204,7 +212,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.subjects.map((subject: any, index: number) => (
+              {subjects.map((subject: any, index: number) => (
                 <tr key={index} className="hover:bg-secondary/30 transition-colors">
                   <td className="py-3 text-sm font-medium">{subject.name}</td>
                   <td className="py-3 text-sm text-right">{subject.current}</td>
