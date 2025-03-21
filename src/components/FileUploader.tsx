@@ -166,19 +166,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           <span className="text-sm">Fichiers prêts à être analysés</span>
         </div>
       )}
-      
-      <div className="bg-accent/50 rounded-lg p-4 mt-4">
-        <div className="flex space-x-3">
-          <AlertCircle className="h-5 w-5 text-primary flex-shrink-0" />
-          <div className="text-sm">
-            <h4 className="font-medium">Comment exporter mes données depuis PRONOTE ?</h4>
-            <p className="text-muted-foreground mt-1">
-              Dans PRONOTE, accédez à l'onglet "Notes", puis cliquez sur l'icône d'export (flèche vers le haut) 
-              et sélectionnez "Exporter au format Excel" ou "PDF". Choisissez les données à inclure et cliquez sur "Exporter".
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
