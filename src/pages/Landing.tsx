@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, Clock, Shield, FileBarChart, BrainCircuit, Lock, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Clock, Shield, FileBarChart, BrainCircuit, Lock, ArrowRight, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -13,7 +12,7 @@ const Landing = () => {
         <div className="app-container py-12 md:py-24 flex flex-col md:flex-row items-center justify-between gap-12">
           <div className="md:w-1/2 space-y-6 text-white z-10">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-              Simplifiez votre conseil de classe avec <span className="text-primary-foreground">BulletinPro</span>
+              Simplifiez votre conseil de classe avec <span className="text-primary-foreground">ClassReviewMaster</span>
             </h1>
             
             <p className="text-lg md:text-xl">
@@ -38,7 +37,7 @@ const Landing = () => {
             <div className="relative bg-foreground/5 backdrop-blur-sm rounded-lg shadow-2xl overflow-hidden border border-white/10">
               <img 
                 src="/dashboard-screenshot.png" 
-                alt="BulletinPro Dashboard" 
+                alt="ClassReviewMaster Dashboard" 
                 className="w-full h-auto rounded-lg shadow-lg"
                 onError={(e) => {
                   e.currentTarget.src = "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&q=80";
@@ -57,7 +56,7 @@ const Landing = () => {
       <section id="benefices" className="py-20 bg-secondary/30">
         <div className="app-container">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4">Pourquoi choisir BulletinPro ?</h2>
+            <h2 className="text-3xl font-bold mb-4">Pourquoi choisir ClassReviewMaster ?</h2>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
               Notre application est conçue spécifiquement pour les enseignants responsables des conseils de classe, 
               offrant des outils puissants pour simplifier votre travail.
@@ -119,7 +118,7 @@ const Landing = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">Fonctionnalités principales</h2>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              Découvrez comment BulletinPro peut transformer votre expérience des conseils de classe.
+              Découvrez comment ClassReviewMaster peut transformer votre expérience des conseils de classe.
             </p>
           </div>
           
@@ -247,7 +246,7 @@ const Landing = () => {
             </div>
             <h2 className="text-3xl font-bold mb-4">Sécurité et confidentialité garanties</h2>
             <p className="text-lg mb-8">
-              La protection des données des élèves est notre priorité absolue. Nous avons conçu BulletinPro 
+              La protection des données des élèves est notre priorité absolue. Nous avons conçu ClassReviewMaster 
               avec les plus hauts standards de sécurité.
             </p>
             
@@ -310,7 +309,7 @@ const Landing = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">Ce que disent nos utilisateurs</h2>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              Découvrez comment BulletinPro a transformé l'expérience des conseils de classe pour de nombreux enseignants.
+              Découvrez comment ClassReviewMaster a transformé l'expérience des conseils de classe pour de nombreux enseignants.
             </p>
           </div>
           
@@ -319,7 +318,7 @@ const Landing = () => {
               {
                 name: "Marie Durand",
                 role: "Professeure principale, Lycée Victor Hugo",
-                quote: "Avant BulletinPro, je passais des heures à analyser les résultats et à rédiger les appréciations. Maintenant, je peux me concentrer sur l'essentiel : l'accompagnement de mes élèves."
+                quote: "Avant ClassReviewMaster, je passais des heures à analyser les résultats et à rédiger les appréciations. Maintenant, je peux me concentrer sur l'essentiel : l'accompagnement de mes élèves."
               },
               {
                 name: "Thomas Martin",
@@ -358,7 +357,7 @@ const Landing = () => {
         <div className="app-container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">Prêt à révolutionner vos conseils de classe ?</h2>
           <p className="text-xl mb-8 max-w-3xl mx-auto">
-            Rejoignez des milliers d'enseignants qui ont déjà simplifié leur travail grâce à BulletinPro.
+            Rejoignez des milliers d'enseignants qui ont déjà simplifié leur travail grâce à ClassReviewMaster.
           </p>
           
           <Link to="/">
@@ -379,8 +378,10 @@ const Landing = () => {
         <div className="app-container">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center mb-6 md:mb-0">
-              <span className="bg-primary text-primary-foreground p-1 rounded mr-2">BP</span>
-              <span className="text-xl font-medium">BulletinPro</span>
+              <span className="bg-primary text-primary-foreground p-1 rounded flex items-center justify-center">
+                <GraduationCap className="h-5 w-5" />
+              </span>
+              <span className="text-xl font-medium ml-2">ClassReviewMaster</span>
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
@@ -393,7 +394,7 @@ const Landing = () => {
           </div>
           
           <div className="border-t border-border/40 mt-8 pt-8 text-center text-sm text-muted-foreground">
-            <p>© {new Date().getFullYear()} BulletinPro — Tous droits réservés</p>
+            <p>© {new Date().getFullYear()} ClassReviewMaster — Tous droits réservés</p>
           </div>
         </div>
       </footer>
@@ -402,3 +403,4 @@ const Landing = () => {
 };
 
 export default Landing;
+

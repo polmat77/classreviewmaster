@@ -39,8 +39,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             to="/" 
             className="flex items-center space-x-2 text-xl font-medium transition-opacity hover:opacity-80"
           >
-            <span className="bg-primary text-primary-foreground p-1 rounded">BP</span>
-            <span className="hidden sm:inline-block">BulletinPro</span>
+            <span className="bg-primary text-primary-foreground p-1 rounded flex items-center justify-center">
+              <GraduationCap className="h-5 w-5" />
+            </span>
+            <span className="hidden sm:inline-block">ClassReviewMaster</span>
           </Link>
           
           <div className="flex items-center space-x-4">
@@ -90,7 +92,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       
       <footer className="border-t border-border/40 py-6 bg-secondary/50">
         <div className="app-container text-center text-sm text-muted-foreground">
-          <p>© {new Date().getFullYear()} BulletinPro — Simplifiez l'analyse de vos bulletins scolaires</p>
+          <p>© {new Date().getFullYear()} ClassReviewMaster — Simplifiez l'analyse de vos bulletins scolaires</p>
         </div>
       </footer>
     </div>
