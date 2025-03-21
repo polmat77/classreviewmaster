@@ -1,11 +1,10 @@
-
 import { toast } from 'sonner';
 
 // OpenAI API endpoints
 const API_URL = 'https://api.openai.com/v1/chat/completions';
 
-// Fixed API key (to be replaced with the one you provide)
-const FIXED_API_KEY = 'your-api-key-here'; // Replace this with your actual API key
+// API key provided by the admin
+const FIXED_API_KEY = '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';
 
 // Types for the OpenAI API
 interface OpenAIMessage {
@@ -34,6 +33,22 @@ export const OpenAIService = {
    */
   isApiAvailable(): boolean {
     return !!FIXED_API_KEY && FIXED_API_KEY !== 'your-api-key-here';
+  },
+
+  /**
+   * Check if API key is available
+   */
+  hasApiKey(): boolean {
+    return this.isApiAvailable();
+  },
+
+  /**
+   * Save API key
+   */
+  saveApiKey(key: string): void {
+    // This function is a no-op since we're using a fixed API key
+    // But we keep it to maintain compatibility with existing code
+    console.log('Using fixed API key provided by administrator');
   },
 
   /**
