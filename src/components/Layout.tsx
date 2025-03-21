@@ -3,7 +3,7 @@ import React, { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Home, BarChart2, FileText, Users, FileSpreadsheet } from 'lucide-react';
-import useMobile from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface LayoutProps {
   children: ReactNode;
@@ -11,7 +11,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, className }) => {
-  const isMobile = useMobile();
+  const isMobile = useIsMobile();
   
   return (
     <div className="min-h-screen bg-background">
