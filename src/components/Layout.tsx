@@ -1,95 +1,76 @@
 
-import React from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import React, { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import StepIndicator from './StepIndicator';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, BarChart2, FileText, Users, FileSpreadsheet } from 'lucide-react';
+import useMobile from '@/hooks/use-mobile';
 
 interface LayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
+  className?: string;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const location = useLocation();
-  const currentPath = location.pathname;
-  
-  const steps = [
-    { id: 1, name: 'Analyse des résultats', path: '/dashboard' },
-    { id: 2, name: 'Appréciation générale de classe', path: '/appreciation-generale' },
-    { id: 3, name: 'Appréciations individuelles', path: '/appreciations-individuelles' },
-    { id: 4, name: 'Rapport final', path: '/rapport' },
-  ];
-  
-  // Find current step
-  const currentStep = steps.findIndex(step => step.path === currentPath) + 1;
-  const currentStepIndex = Math.max(0, currentStep - 1);
-  
-  // Previous and next navigation
-  const prevStep = currentStep > 1 ? steps[currentStep - 2].path : null;
-  const nextStep = currentStep < steps.length ? steps[currentStep].path : null;
+const Layout: React.FC<LayoutProps> = ({ children, className }) => {
+  const isMobile = useMobile();
   
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="app-container flex justify-between items-center h-16">
-          <Link 
-            to="/" 
-            className="flex items-center space-x-2 text-xl font-medium transition-opacity hover:opacity-80"
-          >
-            <span className="bg-primary text-primary-foreground p-1 rounded">BP</span>
-            <span className="hidden sm:inline-block">BulletinPro</span>
+    <div className="min-h-screen bg-background">
+      {/* Top navigation bar */}
+      <div className="border-b">
+        <div className="container py-4 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2">
+            <div className="h-8 w-8 bg-primary text-primary-foreground rounded flex items-center justify-center font-semibold">P</div>
+            <span className="font-medium text-xl hidden sm:inline-block">ProReport</span>
           </Link>
           
-          <div className="flex items-center space-x-4">
-            {/* Add menu items or user profile if needed */}
-          </div>
-        </div>
-      </header>
-      
-      <div className="app-container flex-1 flex flex-col">
-        <StepIndicator 
-          steps={steps} 
-          currentStep={currentStep} 
-          className="my-6"
-        />
-        
-        <main className="flex-1 animate-fade-in">
-          {children}
-        </main>
-        
-        <div className="flex justify-between my-8">
-          {prevStep ? (
-            <Link 
-              to={prevStep} 
-              className="button-secondary flex items-center space-x-2"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span>Précédent</span>
-            </Link>
-          ) : (
-            <div /> /* Empty placeholder */
-          )}
+          <nav className="hidden md:flex space-x-6">
+            <Link to="/" className="nav-link">Accueil</Link>
+            <Link to="/appreciation-generale" className="nav-link">Appréciation générale</Link>
+            <Link to="/appreciations-individuelles" className="nav-link">Appréciations individuelles</Link>
+            <Link to="/analyse" className="nav-link">Analyse</Link>
+            <Link to="/rapport" className="nav-link">Rapport</Link>
+          </nav>
           
-          {nextStep && (
-            <Link 
-              to={nextStep} 
-              className={cn(
-                "button-primary flex items-center space-x-2",
-                !prevStep && "ml-auto" // Move to right if no previous button
-              )}
-            >
-              <span>Suivant</span>
-              <ChevronRight className="h-4 w-4" />
-            </Link>
-          )}
+          <div className="md:hidden">
+            {/* Mobile menu button would go here */}
+          </div>
         </div>
       </div>
       
-      <footer className="border-t border-border/40 py-6 bg-secondary/50">
-        <div className="app-container text-center text-sm text-muted-foreground">
-          <p>© {new Date().getFullYear()} BulletinPro — Simplifiez l'analyse de vos bulletins scolaires</p>
+      <main className="container py-8">
+        <h1 className="text-center text-3xl font-bold mb-6">Importez vos fichiers...</h1>
+        <div className={cn("app-container flex-1 flex flex-col", className)}>
+          {children}
         </div>
-      </footer>
+      </main>
+      
+      {/* Bottom navigation for mobile */}
+      {isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-background z-10">
+          <div className="grid grid-cols-5 h-14">
+            <Link to="/" className="mobile-nav-link">
+              <Home className="h-5 w-5" />
+              <span className="text-xs">Accueil</span>
+            </Link>
+            <Link to="/appreciation-generale" className="mobile-nav-link">
+              <FileText className="h-5 w-5" />
+              <span className="text-xs">Générale</span>
+            </Link>
+            <Link to="/appreciations-individuelles" className="mobile-nav-link">
+              <Users className="h-5 w-5" />
+              <span className="text-xs">Individuelles</span>
+            </Link>
+            <Link to="/analyse" className="mobile-nav-link">
+              <BarChart2 className="h-5 w-5" />
+              <span className="text-xs">Analyse</span>
+            </Link>
+            <Link to="/rapport" className="mobile-nav-link">
+              <FileSpreadsheet className="h-5 w-5" />
+              <span className="text-xs">Rapport</span>
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
