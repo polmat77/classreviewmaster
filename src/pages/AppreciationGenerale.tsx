@@ -5,7 +5,6 @@ import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
 import { KeyRound, Lightbulb, AlertCircle, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import ApiKeyForm from '@/components/ApiKeyForm';
 import { processGradeFiles } from '@/utils/data-processing';
 import { toast } from 'sonner';
 
@@ -98,8 +97,6 @@ const AppreciationGenerale = () => {
           </div>
           
           <div className="space-y-4">
-            <ApiKeyForm className="mb-6" />
-            
             <div className="glass-panel p-5 space-y-4">
               <div className="flex items-center">
                 <div className="bg-primary/10 p-2 rounded-full">

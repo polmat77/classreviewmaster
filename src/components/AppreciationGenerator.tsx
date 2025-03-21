@@ -12,11 +12,10 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, RefreshCw, Copy, Check, Lock } from 'lucide-react';
+import { Loader2, RefreshCw, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OpenAIService } from '@/utils/openai-service';
 import { toast } from 'sonner';
-import ApiKeyForm from './ApiKeyForm';
 
 interface AppreciationGeneratorProps {
   type: 'class' | 'individual';
@@ -45,12 +44,17 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   const [appreciation, setAppreciation] = useState('');
   const [progressValue, setProgressValue] = useState('0');
   const [copied, setCopied] = useState(false);
-  const [isApiKeyConfigured, setIsApiKeyConfigured] = useState(false);
-  const [showApiKeyForm, setShowApiKeyForm] = useState(false);
+  const [isApiAvailable, setIsApiAvailable] = useState(false);
   
-  // Check if API key is configured on component mount
+  // Check if API is available on component mount
   useEffect(() => {
-    setIsApiKeyConfigured(OpenAIService.hasApiKey());
+    setIsApiAvailable(OpenAIService.isApiAvailable());
+    
+    if (!OpenAIService.isApiAvailable()) {
+      toast.error("L'API n'est pas configurée par l'administrateur", {
+        duration: 5000,
+      });
+    }
   }, []);
   
   // Reset progress when starting generation
@@ -72,8 +76,8 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   }, [isGenerating, progressValue]);
   
   const generateAppreciation = async () => {
-    if (!isApiKeyConfigured) {
-      setShowApiKeyForm(true);
+    if (!isApiAvailable) {
+      toast.error("L'API n'est pas configurée par l'administrateur");
       return;
     }
     
@@ -130,148 +134,132 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
   
-  const handleApiKeySubmitted = () => {
-    setIsApiKeyConfigured(true);
-    setShowApiKeyForm(false);
-    // Auto-generate after setting the API key
-    generateAppreciation();
-  };
-  
   return (
     <Card className={cn("w-full", className)}>
       <CardContent className="pt-6">
-        {showApiKeyForm ? (
-          <ApiKeyForm onApiKeySubmitted={handleApiKeySubmitted} />
-        ) : (
-          <div className="space-y-6">
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <h3 className="text-lg font-medium">
+              {type === 'class' ? 'Appréciation générale de classe' : `Appréciation pour ${studentName}`}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Générez une appréciation {type === 'class' ? 'pour l\'ensemble de la classe' : 'personnalisée'} en ajustant les paramètres ci-dessous.
+            </p>
+          </div>
+          
+          <div className="space-y-4">
             <div className="space-y-2">
-              <h3 className="text-lg font-medium">
-                {type === 'class' ? 'Appréciation générale de classe' : `Appréciation pour ${studentName}`}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Générez une appréciation {type === 'class' ? 'pour l\'ensemble de la classe' : 'personnalisée'} en ajustant les paramètres ci-dessous.
-              </p>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Ton de l'appréciation</label>
-                <div className="pt-2">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-xs">Très sévère</span>
-                    <span className="text-xs">Exigeant</span>
-                    <span className="text-xs">Neutre</span>
-                    <span className="text-xs">Bienveillant</span>
-                    <span className="text-xs">Dithyrambique</span>
-                  </div>
-                  <Slider
-                    value={[
-                      tone === 'tres-severe' ? 1 : 
-                      tone === 'exigeant' ? 2 : 
-                      tone === 'neutre' ? 3 : 
-                      tone === 'bienveillant' ? 4 : 5
-                    ]}
-                    min={1}
-                    max={5}
-                    step={1}
-                    onValueChange={(value) => {
-                      const toneMap: Record<number, string> = {
-                        1: 'tres-severe',
-                        2: 'exigeant',
-                        3: 'neutre',
-                        4: 'bienveillant',
-                        5: 'dithyrambique'
-                      };
-                      setTone(toneMap[value[0]]);
-                    }}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <label className="text-sm font-medium">Longueur</label>
-                  <span className="text-xs text-muted-foreground">
-                    {length[0] === 1 ? 'Courte' : length[0] === 2 ? 'Moyenne' : 'Détaillée'}
-                  </span>
+              <label className="text-sm font-medium">Ton de l'appréciation</label>
+              <div className="pt-2">
+                <div className="flex justify-between mb-2">
+                  <span className="text-xs">Très sévère</span>
+                  <span className="text-xs">Exigeant</span>
+                  <span className="text-xs">Neutre</span>
+                  <span className="text-xs">Bienveillant</span>
+                  <span className="text-xs">Dithyrambique</span>
                 </div>
                 <Slider
-                  value={length}
+                  value={[
+                    tone === 'tres-severe' ? 1 : 
+                    tone === 'exigeant' ? 2 : 
+                    tone === 'neutre' ? 3 : 
+                    tone === 'bienveillant' ? 4 : 5
+                  ]}
                   min={1}
-                  max={3}
+                  max={5}
                   step={1}
-                  onValueChange={setLength}
+                  onValueChange={(value) => {
+                    const toneMap: Record<number, string> = {
+                      1: 'tres-severe',
+                      2: 'exigeant',
+                      3: 'neutre',
+                      4: 'bienveillant',
+                      5: 'dithyrambique'
+                    };
+                    setTone(toneMap[value[0]]);
+                  }}
                 />
               </div>
-              
-              <Button 
-                onClick={generateAppreciation} 
-                disabled={isGenerating}
-                className="w-full"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Génération en cours...
-                  </>
-                ) : !isApiKeyConfigured ? (
-                  <>
-                    <Lock className="mr-2 h-4 w-4" />
-                    Configurer l'API OpenAI
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Générer l'appréciation
-                  </>
-                )}
-              </Button>
             </div>
             
-            {isGenerating && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span>Analyse des données</span>
-                  <span>{Math.min(100, Math.round(Number(progressValue)))}%</span>
-                </div>
-                <Progress value={Number(progressValue)} className="h-2" />
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <label className="text-sm font-medium">Longueur</label>
+                <span className="text-xs text-muted-foreground">
+                  {length[0] === 1 ? 'Courte' : length[0] === 2 ? 'Moyenne' : 'Détaillée'}
+                </span>
               </div>
-            )}
+              <Slider
+                value={length}
+                min={1}
+                max={3}
+                step={1}
+                onValueChange={setLength}
+              />
+            </div>
             
-            {appreciation && (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-medium">Résultat</h4>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={copyToClipboard}
-                    className="h-8"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="mr-2 h-3 w-3" />
-                        Copié
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="mr-2 h-3 w-3" />
-                        Copier
-                      </>
-                    )}
-                  </Button>
-                </div>
-                
-                <div className={cn(
-                  "p-3 rounded-md bg-muted text-sm transition-opacity h-auto whitespace-pre-wrap overflow-y-auto max-h-[400px]",
-                  isGenerating && "opacity-50"
-                )}>
-                  {appreciation}
-                </div>
-              </div>
-            )}
+            <Button 
+              onClick={generateAppreciation} 
+              disabled={isGenerating || !isApiAvailable}
+              className="w-full"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Génération en cours...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Générer l'appréciation
+                </>
+              )}
+            </Button>
           </div>
-        )}
+          
+          {isGenerating && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span>Analyse des données</span>
+                <span>{Math.min(100, Math.round(Number(progressValue)))}%</span>
+              </div>
+              <Progress value={Number(progressValue)} className="h-2" />
+            </div>
+          )}
+          
+          {appreciation && (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <h4 className="text-sm font-medium">Résultat</h4>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={copyToClipboard}
+                  className="h-8"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="mr-2 h-3 w-3" />
+                      Copié
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-2 h-3 w-3" />
+                      Copier
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              <div className={cn(
+                "p-3 rounded-md bg-muted text-sm transition-opacity h-auto whitespace-pre-wrap overflow-y-auto max-h-[400px]",
+                isGenerating && "opacity-50"
+              )}>
+                {appreciation}
+              </div>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

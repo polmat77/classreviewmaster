@@ -4,6 +4,9 @@ import { toast } from 'sonner';
 // OpenAI API endpoints
 const API_URL = 'https://api.openai.com/v1/chat/completions';
 
+// Fixed API key (to be replaced with the one you provide)
+const FIXED_API_KEY = 'your-api-key-here'; // Replace this with your actual API key
+
 // Types for the OpenAI API
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -26,33 +29,11 @@ interface OpenAIResponse {
 }
 
 export const OpenAIService = {
-  apiKey: '',
-
   /**
-   * Initialize the API key from localStorage or user input
+   * Check if API is available
    */
-  initApiKey(): string | null {
-    const storedKey = localStorage.getItem('openai_api_key');
-    if (storedKey) {
-      this.apiKey = storedKey;
-      return storedKey;
-    }
-    return null;
-  },
-
-  /**
-   * Save API key to local storage
-   */
-  saveApiKey(key: string): void {
-    this.apiKey = key;
-    localStorage.setItem('openai_api_key', key);
-  },
-
-  /**
-   * Validate if API key exists
-   */
-  hasApiKey(): boolean {
-    return !!this.apiKey || !!this.initApiKey();
+  isApiAvailable(): boolean {
+    return !!FIXED_API_KEY && FIXED_API_KEY !== 'your-api-key-here';
   },
 
   /**
@@ -63,8 +44,8 @@ export const OpenAIService = {
     tone: string, 
     length: number
   ): Promise<string> {
-    if (!this.hasApiKey()) {
-      throw new Error('API key not configured');
+    if (!this.isApiAvailable()) {
+      throw new Error('API key not configured by administrator');
     }
 
     const toneMap: Record<string, string> = {
@@ -123,8 +104,8 @@ export const OpenAIService = {
     tone: string,
     length: number
   ): Promise<string> {
-    if (!this.hasApiKey()) {
-      throw new Error('API key not configured');
+    if (!this.isApiAvailable()) {
+      throw new Error('API key not configured by administrator');
     }
 
     const toneMap: Record<string, string> = {
@@ -169,8 +150,8 @@ export const OpenAIService = {
    */
   async generateText(prompt: string, model: string = 'gpt-4o-mini'): Promise<string> {
     try {
-      if (!this.hasApiKey()) {
-        throw new Error('API key not configured');
+      if (!this.isApiAvailable()) {
+        throw new Error('API key not configured by administrator');
       }
 
       const messages: OpenAIMessage[] = [
@@ -188,7 +169,7 @@ export const OpenAIService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
+          'Authorization': `Bearer ${FIXED_API_KEY}`
         },
         body: JSON.stringify({
           model,
