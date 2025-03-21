@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -269,7 +268,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
               </div>
               
               <div className={cn(
-                "p-3 rounded-md bg-muted text-sm transition-opacity",
+                "p-3 rounded-md bg-muted text-sm transition-opacity h-auto whitespace-pre-wrap overflow-y-auto max-h-[400px]",
                 isGenerating && "opacity-50"
               )}>
                 {appreciation}
