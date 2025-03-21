@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
-import { Search, Filter, RefreshCw, Save, UserPlus, Printer, FileText, List, Grid } from 'lucide-react';
+import { Search, Filter, RefreshCw, Save, UserPlus, Printer, FileText, List, Grid, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
