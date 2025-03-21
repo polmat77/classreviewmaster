@@ -15,15 +15,22 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({ onFilesUploaded }) 
   useEffect(() => {
     // Check if there are any previously uploaded files
     const files = getPreviousGradeFiles();
-    setSavedFiles(files);
+    setSavedFiles(files || []);
   }, []);
   
   const handlePreviousGradeTableUpload = (files: File[]) => {
+    if (files.length === 0) return;
+    
     setPreviousGradeTableFiles(files);
-    if (savePreviousGradeFiles(files)) {
-      toast.success("Tableau des notes précédent enregistré");
-      setSavedFiles(getPreviousGradeFiles());
-      if (onFilesUploaded) onFilesUploaded();
+    try {
+      if (savePreviousGradeFiles(files)) {
+        toast.success("Tableau des notes précédent enregistré");
+        setSavedFiles(getPreviousGradeFiles());
+        if (onFilesUploaded) onFilesUploaded();
+      }
+    } catch (error) {
+      console.error("Error saving files:", error);
+      toast.error("Erreur lors de l'enregistrement des fichiers");
     }
   };
   
@@ -36,14 +43,14 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({ onFilesUploaded }) 
         </p>
         <FileUploader 
           onFilesAccepted={handlePreviousGradeTableUpload}
-          acceptedFileTypes={['.csv', '.xlsx', '.xls']}
+          acceptedFileTypes={['.csv', '.xlsx', '.xls', '.pdf']}
           maxFiles={1}
           label="Importer un tableau des notes"
-          description="Fichier Excel ou CSV contenant les notes"
+          description="Fichier Excel, CSV ou PDF contenant les notes"
         />
       </div>
       
-      {savedFiles.length > 0 && (
+      {savedFiles && savedFiles.length > 0 && (
         <div className="bg-secondary/30 p-4 rounded-lg">
           <h4 className="text-sm font-medium mb-2">Fichiers de notes enregistrés</h4>
           <ul className="text-sm space-y-1">

@@ -22,6 +22,9 @@ const Index = () => {
     // If we already have previous files, automatically process both
     if (previousGradeFiles.length > 0 || getPreviousGradeFiles().length > 0) {
       processFiles(files, previousGradeFiles);
+    } else {
+      // Process just the current files if no previous files are available
+      processFiles(files, []);
     }
   };
   
@@ -38,17 +41,24 @@ const Index = () => {
   };
   
   const processFiles = async (current: File[], previous: File[]) => {
+    if (current.length === 0 && previous.length === 0) {
+      toast.error("Aucun fichier à traiter");
+      return;
+    }
+
     setIsLoading(true);
     
     try {
       // In a real app, this would actually process the files
       const data = await processGradeFiles([...current, ...previous]);
+      console.log("Processed data:", data); // Debug log
       setProcessedData(data);
       setHasUploaded(true);
       toast.success("Analyse des fichiers terminée");
     } catch (error) {
       console.error('Error processing files:', error);
       toast.error("Erreur lors du traitement des fichiers");
+      setHasUploaded(false); // Reset in case of error
     } finally {
       setIsLoading(false);
     }
