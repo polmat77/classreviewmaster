@@ -1,3 +1,4 @@
+
 import { toast } from 'sonner';
 
 // OpenAI API endpoints
@@ -32,7 +33,7 @@ export const OpenAIService = {
    * Check if API is available
    */
   isApiAvailable(): boolean {
-    return !!FIXED_API_KEY && FIXED_API_KEY !== 'your-api-key-here';
+    return !!FIXED_API_KEY;
   },
 
   /**
