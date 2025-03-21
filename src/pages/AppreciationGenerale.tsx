@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
-import { KeyRound, Lightbulb, Alert } from 'lucide-react';
+import { KeyRound, Lightbulb, AlertCircle, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ApiKeyForm from '@/components/ApiKeyForm';
 import { processGradeFiles } from '@/utils/data-processing';
@@ -149,7 +150,7 @@ const AppreciationGenerale = () => {
             
             <div className="bg-accent/50 rounded-lg p-4">
               <div className="flex space-x-3">
-                <Alert className="h-5 w-5 text-primary flex-shrink-0" />
+                <AlertCircle className="h-5 w-5 text-primary flex-shrink-0" />
                 <div className="text-sm">
                   <p>
                     L'appréciation générée doit respecter la limite de <span className="font-medium">255 caractères</span> 
