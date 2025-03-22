@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
@@ -201,7 +202,7 @@ const AppreciationGenerale = () => {
               <AppreciationGenerator 
                 type="class"
                 analysisData={analysisData}
-                maxChars={255}
+                maxChars={500} // Updated from 255 to 500
               />
             ) : (
               <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
@@ -268,7 +269,7 @@ const AppreciationGenerale = () => {
                 <AlertCircle className="h-5 w-5 text-primary flex-shrink-0" />
                 <div className="text-sm">
                   <p>
-                    L'appréciation générée doit respecter la limite de <span className="font-medium">255 caractères</span> 
+                    L'appréciation générée doit respecter la limite de <span className="font-medium">500 caractères</span> 
                     pour être compatible avec les systèmes de gestion des bulletins.
                   </p>
                 </div>

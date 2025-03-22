@@ -33,7 +33,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   studentName,
   studentData,
   classData,
-  maxChars,
+  maxChars = 500, // Default to 500 characters
   analysisData,
   className,
   onAppreciationGenerated
@@ -118,11 +118,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
         );
       }
       
-      // Limit to maxChars if specified
-      if (maxChars && result.length > maxChars) {
-        result = result.substring(0, maxChars - 3) + '...';
-      }
-      
+      // No longer truncating the text with "..." regardless of length
       setAppreciation(result);
       if (onAppreciationGenerated) {
         onAppreciationGenerated(result);

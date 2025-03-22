@@ -293,7 +293,7 @@ const AppreciationsIndividuelles = () => {
                       type="individual"
                       studentName={selectedStudent.name}
                       studentData={selectedStudent}
-                      maxChars={500} 
+                      maxChars={500} // Updated from 500 instead of previous value
                       className="mb-0"
                       onAppreciationGenerated={(appreciation) => handleAppreciationGenerated(selectedStudent.id, appreciation)}
                     />
@@ -358,7 +358,7 @@ const AppreciationsIndividuelles = () => {
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="text-sm text-muted-foreground max-w-xl line-clamp-2">
+                        <div className="text-sm text-muted-foreground max-w-xl">
                           {appreciations[student.id] || 
                             <span className="italic">Cliquez sur "Tout régénérer" pour créer les appréciations</span>
                           }
