@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
@@ -8,37 +9,49 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { processGradeFiles } from '@/utils/data-processing';
 
-// Mock data for student list
-const mockStudents = [
-  { id: 1, name: 'Martin Louise', average: 16.7, category: 'excellent', trend: 'up' },
-  { id: 2, name: 'Dubois Thomas', average: 14.2, category: 'good', trend: 'stable' },
-  { id: 3, name: 'Bernard Julie', average: 12.8, category: 'average', trend: 'up' },
-  { id: 4, name: 'Petit Nicolas', average: 9.5, category: 'struggling', trend: 'down' },
-  { id: 5, name: 'Robert Emma', average: 15.3, category: 'good', trend: 'up' },
-  { id: 6, name: 'Richard Lucas', average: 11.9, category: 'average', trend: 'stable' },
-  { id: 7, name: 'Moreau Hugo', average: 13.4, category: 'average', trend: 'up' },
-  { id: 8, name: 'Simon Chloé', average: 8.7, category: 'struggling', trend: 'down' },
-];
-
 const AppreciationsIndividuelles = () => {
-  const [selectedStudent, setSelectedStudent] = useState<any>(mockStudents[0]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
+  // Replace mock data with data from analysis
   const [individualReportFiles, setIndividualReportFiles] = useState<File[]>([]);
-  const [appreciations, setAppreciations] = useState<Record<number, string>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
   
-  const filteredStudents = mockStudents.filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filter === 'all' || student.category === filter;
+  // State to track the currently selected student
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
+  const [appreciations, setAppreciations] = useState<Record<string, string>>({});
+
+  // Extract students from analysis data or use empty array
+  const students = analysisData?.currentTerm?.students || [];
+  
+  // Filter students based on search and category
+  const filteredStudents = students.filter((student: any) => {
+    const matchesSearch = student?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Determine category based on average
+    const avg = student.average || 0;
+    let category = '';
+    if (avg >= 16) category = 'excellent';
+    else if (avg >= 14) category = 'good';
+    else if (avg >= 10) category = 'average';
+    else category = 'struggling';
+    
+    const matchesFilter = filter === 'all' || category === filter;
     return matchesSearch && matchesFilter;
   });
+
+  // Set a default selected student when analysis data changes
+  React.useEffect(() => {
+    if (analysisData?.currentTerm?.students?.length > 0 && !selectedStudent) {
+      setSelectedStudent(analysisData.currentTerm.students[0]);
+    }
+  }, [analysisData, selectedStudent]);
   
   const handleIndividualReportUpload = (files: File[]) => {
     setIndividualReportFiles(files);
     setAnalysisData(null); // Reset analysis when new files are uploaded
+    setSelectedStudent(null); // Reset selected student
     toast.success("Bulletins individuels importés avec succès");
   };
   
@@ -52,14 +65,15 @@ const AppreciationsIndividuelles = () => {
     
     try {
       const data = await processGradeFiles(individualReportFiles);
+      console.log("Analysis complete, data available:", data);
       setAnalysisData(data);
-      toast.success("Analyse des données terminée avec succès");
       
-      // Update student data based on the analysis
-      if (data && data.currentTerm && data.currentTerm.students) {
-        // Process and use the real data
-        console.log("Analysis complete, data available:", data);
+      // Set the first student as selected by default
+      if (data?.currentTerm?.students?.length > 0) {
+        setSelectedStudent(data.currentTerm.students[0]);
       }
+      
+      toast.success("Analyse des données terminée avec succès");
     } catch (error) {
       console.error("Error analyzing data:", error);
       toast.error("Erreur lors de l'analyse des données");
@@ -69,26 +83,29 @@ const AppreciationsIndividuelles = () => {
   };
   
   const regenerateAllAppreciations = () => {
-    // Simulate regenerating for all students
-    const newAppreciations: Record<number, string> = {};
-    mockStudents.forEach(student => {
-      // Generate simple appreciations based on category
+    if (!analysisData?.currentTerm?.students) {
+      toast.error("Veuillez d'abord analyser les données");
+      return;
+    }
+    
+    // Generate appreciations for all students
+    const newAppreciations: Record<string, string> = {};
+    analysisData.currentTerm.students.forEach((student: any) => {
+      // Generate simple appreciations based on average
       let appreciation = "";
-      switch(student.category) {
-        case 'excellent':
-          appreciation = `${student.name} réalise un excellent trimestre avec des résultats remarquables.`;
-          break;
-        case 'good':
-          appreciation = `${student.name} présente un bon niveau général avec un travail sérieux.`;
-          break;
-        case 'average':
-          appreciation = `${student.name} obtient des résultats corrects mais qui pourraient être améliorés.`;
-          break;
-        case 'struggling':
-          appreciation = `${student.name} rencontre des difficultés qui nécessitent un travail plus approfondi.`;
-          break;
+      const avg = student.average || 0;
+      
+      if (avg >= 16) {
+        appreciation = `${student.name} réalise un excellent trimestre avec des résultats remarquables.`;
+      } else if (avg >= 14) {
+        appreciation = `${student.name} présente un bon niveau général avec un travail sérieux.`;
+      } else if (avg >= 10) {
+        appreciation = `${student.name} obtient des résultats corrects mais qui pourraient être améliorés.`;
+      } else {
+        appreciation = `${student.name} rencontre des difficultés qui nécessitent un travail plus approfondi.`;
       }
-      newAppreciations[student.id] = appreciation;
+      
+      newAppreciations[student.name] = appreciation;
     });
     
     setAppreciations(newAppreciations);
@@ -99,30 +116,58 @@ const AppreciationsIndividuelles = () => {
     toast.success("Toutes les appréciations ont été enregistrées");
   };
   
-  const handleAppreciationGenerated = (id: number, appreciation: string) => {
+  const handleAppreciationGenerated = (studentName: string, appreciation: string) => {
     setAppreciations(prev => ({
       ...prev,
-      [id]: appreciation
+      [studentName]: appreciation
     }));
   };
   
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'excellent': return 'bg-teal-100 text-teal-800';
-      case 'good': return 'bg-green-100 text-green-800';
-      case 'average': return 'bg-yellow-100 text-yellow-800';
-      case 'struggling': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const getCategoryColor = (avg: number) => {
+    if (avg >= 16) return 'bg-teal-100 text-teal-800';
+    if (avg >= 14) return 'bg-green-100 text-green-800';
+    if (avg >= 10) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
   };
   
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case 'up': return <span className="text-green-500">▲</span>;
-      case 'down': return <span className="text-red-500">▼</span>;
-      default: return <span className="text-yellow-500">◆</span>;
-    }
+  const getCategoryName = (avg: number) => {
+    if (avg >= 16) return 'Excellent';
+    if (avg >= 14) return 'Bon';
+    if (avg >= 10) return 'Moyen';
+    return 'Difficulté';
   };
+  
+  const getTrendIcon = (student: any) => {
+    // Calculate trend using previous data if available
+    if (analysisData?.previousTerms && analysisData?.previousTerms.length > 0) {
+      const prevData = analysisData.previousTerms[0];
+      if (prevData) {
+        // This is simplified - in reality you'd need to match the student across terms
+        if (student.average > prevData.classAverage) return <span className="text-green-500">▲</span>;
+        if (student.average < prevData.classAverage) return <span className="text-red-500">▼</span>;
+      }
+    }
+    return <span className="text-yellow-500">◆</span>;
+  };
+  
+  // Helper function to get subjects for a student
+  const getStudentSubjects = (student: any) => {
+    if (!student || !student.subjects) return [];
+    return student.subjects.slice(0, 4); // Get first 4 subjects
+  };
+  
+  // Placeholder message when no data is available
+  const noDataMessage = (
+    <div className="text-center p-6 space-y-4">
+      <div className="flex justify-center items-center space-x-2 text-muted-foreground">
+        <FileText className="h-6 w-6" />
+        <span className="text-lg font-medium">Aucune donnée disponible</span>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Veuillez importer des fichiers et cliquer sur "Analyser les données" pour commencer.
+      </p>
+    </div>
+  );
   
   return (
     <Layout>
@@ -174,285 +219,277 @@ const AppreciationsIndividuelles = () => {
           {analysisData && (
             <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30 rounded-md text-sm flex items-center text-green-700 dark:text-green-400">
               <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-              Analyse terminée ! Utilisez les données réelles des étudiants pour générer des appréciations.
+              Analyse terminée ! {analysisData.currentTerm.students.length} élèves analysés avec une moyenne générale de {analysisData.currentTerm.classAverage.toFixed(1)}.
             </div>
           )}
         </div>
         
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-medium">Gestion des appréciations</h2>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setViewMode('single')}
-              className={cn(
-                "p-2 rounded-md transition-colors",
-                viewMode === 'single' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
-              )}
-              title="Vue individuelle"
-            >
-              <Grid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('all')}
-              className={cn(
-                "p-2 rounded-md transition-colors",
-                viewMode === 'all' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
-              )}
-              title="Vue d'ensemble"
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        
-        {viewMode === 'single' ? (
-          <div className="flex flex-col lg:flex-row gap-6">
-            <div className="lg:w-1/3 flex flex-col">
-              <div className="glass-panel p-4 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-medium">Liste des élèves</h3>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={regenerateAllAppreciations}
-                      className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                      title="Régénérer toutes les appréciations"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
-                    <button 
-                      onClick={saveAllAppreciations}
-                      className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                      title="Enregistrer toutes les appréciations"
-                    >
-                      <Save className="h-4 w-4" />
-                    </button>
-                    <button 
-                      onClick={() => toast.success("Impression lancée")}
-                      className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                      title="Imprimer les appréciations"
-                    >
-                      <Printer className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
-                    <input 
-                      type="text"
-                      placeholder="Rechercher un élève..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="glass-input pl-9 h-9 w-full text-sm"
-                    />
-                  </div>
-                  
-                  <div className="relative">
-                    <Filter className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
-                    <select 
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                      className="glass-input pl-9 pr-8 h-9 text-sm appearance-none"
-                    >
-                      <option value="all">Tous</option>
-                      <option value="excellent">Excellents</option>
-                      <option value="good">Bons</option>
-                      <option value="average">Moyens</option>
-                      <option value="struggling">En difficulté</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="divide-y max-h-[500px] overflow-y-auto scrollbar-none">
-                  {filteredStudents.length > 0 ? filteredStudents.map((student) => (
-                    <button
-                      key={student.id}
-                      onClick={() => setSelectedStudent(student)}
-                      className={cn(
-                        "w-full flex items-center p-2.5 hover:bg-secondary/50 transition-colors text-left",
-                        selectedStudent.id === student.id && "bg-primary/5"
-                      )}
-                    >
-                      <div className="flex-1">
-                        <div className="font-medium">{student.name}</div>
-                        <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                          <span>Moyenne: {student.average}</span>
-                          <span>{getTrendIcon(student.trend)}</span>
-                        </div>
+        {/* Only show content if there's analysis data */}
+        {!analysisData ? (
+          noDataMessage
+        ) : (
+          <>
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-medium">Gestion des appréciations</h2>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setViewMode('single')}
+                  className={cn(
+                    "p-2 rounded-md transition-colors",
+                    viewMode === 'single' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
+                  )}
+                  title="Vue individuelle"
+                >
+                  <Grid className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('all')}
+                  className={cn(
+                    "p-2 rounded-md transition-colors",
+                    viewMode === 'all' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
+                  )}
+                  title="Vue d'ensemble"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            
+            {viewMode === 'single' ? (
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="lg:w-1/3 flex flex-col">
+                  <div className="glass-panel p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">Liste des élèves</h3>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={regenerateAllAppreciations}
+                          className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                          title="Régénérer toutes les appréciations"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={saveAllAppreciations}
+                          className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                          title="Enregistrer toutes les appréciations"
+                        >
+                          <Save className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => toast.success("Impression lancée")}
+                          className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                          title="Imprimer les appréciations"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
+                        <input 
+                          type="text"
+                          placeholder="Rechercher un élève..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="glass-input pl-9 h-9 w-full text-sm"
+                        />
                       </div>
                       
-                      <div className={cn(
-                        "text-xs px-2 py-0.5 rounded-full",
-                        getCategoryColor(student.category)
-                      )}>
-                        {student.category === 'excellent' && 'Excellent'}
-                        {student.category === 'good' && 'Bon'}
-                        {student.category === 'average' && 'Moyen'}
-                        {student.category === 'struggling' && 'Difficulté'}
+                      <div className="relative">
+                        <Filter className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
+                        <select 
+                          value={filter}
+                          onChange={(e) => setFilter(e.target.value)}
+                          className="glass-input pl-9 pr-8 h-9 text-sm appearance-none"
+                        >
+                          <option value="all">Tous</option>
+                          <option value="excellent">Excellents</option>
+                          <option value="good">Bons</option>
+                          <option value="average">Moyens</option>
+                          <option value="struggling">En difficulté</option>
+                        </select>
                       </div>
-                    </button>
-                  )) : (
-                    <div className="py-8 text-center text-muted-foreground text-sm">
-                      <div className="flex justify-center mb-2">
-                        <UserPlus className="h-6 w-6" />
+                    </div>
+                    
+                    <div className="divide-y max-h-[500px] overflow-y-auto scrollbar-none">
+                      {filteredStudents.length > 0 ? filteredStudents.map((student: any) => (
+                        <button
+                          key={student.name}
+                          onClick={() => setSelectedStudent(student)}
+                          className={cn(
+                            "w-full flex items-center p-2.5 hover:bg-secondary/50 transition-colors text-left",
+                            selectedStudent?.name === student.name && "bg-primary/5"
+                          )}
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium">{student.name}</div>
+                            <div className="text-xs text-muted-foreground flex items-center space-x-1">
+                              <span>Moyenne: {student.average?.toFixed(1) || "N/A"}</span>
+                              <span>{getTrendIcon(student)}</span>
+                            </div>
+                          </div>
+                          
+                          <div className={cn(
+                            "text-xs px-2 py-0.5 rounded-full",
+                            getCategoryColor(student.average || 0)
+                          )}>
+                            {getCategoryName(student.average || 0)}
+                          </div>
+                        </button>
+                      )) : (
+                        <div className="py-8 text-center text-muted-foreground text-sm">
+                          <div className="flex justify-center mb-2">
+                            <UserPlus className="h-6 w-6" />
+                          </div>
+                          <p>Aucun élève trouvé</p>
+                          <p className="text-xs">Ajustez vos critères de recherche</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="lg:w-2/3">
+                  {selectedStudent && (
+                    <div className="space-y-4">
+                      <div className="glass-panel p-5">
+                        <div className="flex justify-between items-center mb-4">
+                          <div>
+                            <h3 className="text-lg font-medium">{selectedStudent.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Moyenne générale: {selectedStudent.average?.toFixed(1) || "N/A"} {getTrendIcon(selectedStudent)}
+                            </p>
+                          </div>
+                          
+                          <div className={cn(
+                            "text-sm px-3 py-1 rounded-full font-medium",
+                            getCategoryColor(selectedStudent.average || 0)
+                          )}>
+                            {getCategoryName(selectedStudent.average || 0)}
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                          {getStudentSubjects(selectedStudent).map((subject: any, index: number) => (
+                            <div key={index} className="p-3 bg-secondary/50 rounded-lg">
+                              <div className="text-xs text-muted-foreground">{subject.name}</div>
+                              <div className="text-lg font-medium">{subject.grade.toFixed(1)}</div>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <AppreciationGenerator 
+                          type="individual"
+                          studentName={selectedStudent.name}
+                          studentData={selectedStudent}
+                          maxChars={500}
+                          className="mb-0"
+                          analysisData={analysisData}
+                          onAppreciationGenerated={(appreciation) => handleAppreciationGenerated(selectedStudent.name, appreciation)}
+                        />
                       </div>
-                      <p>Aucun élève trouvé</p>
-                      <p className="text-xs">Ajustez vos critères de recherche</p>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
-            
-            <div className="lg:w-2/3">
-              {selectedStudent && (
-                <div className="space-y-4">
-                  <div className="glass-panel p-5">
-                    <div className="flex justify-between items-center mb-4">
-                      <div>
-                        <h3 className="text-lg font-medium">{selectedStudent.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Moyenne générale: {selectedStudent.average} {getTrendIcon(selectedStudent.trend)}
-                        </p>
-                      </div>
-                      
-                      <div className={cn(
-                        "text-sm px-3 py-1 rounded-full font-medium",
-                        getCategoryColor(selectedStudent.category)
-                      )}>
-                        {selectedStudent.category === 'excellent' && 'Excellent'}
-                        {selectedStudent.category === 'good' && 'Bon'}
-                        {selectedStudent.category === 'average' && 'Moyen'}
-                        {selectedStudent.category === 'struggling' && 'En difficulté'}
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                      <div className="p-3 bg-secondary/50 rounded-lg">
-                        <div className="text-xs text-muted-foreground">Français</div>
-                        <div className="text-lg font-medium">13.5</div>
-                      </div>
-                      <div className="p-3 bg-secondary/50 rounded-lg">
-                        <div className="text-xs text-muted-foreground">Maths</div>
-                        <div className="text-lg font-medium">12.0</div>
-                      </div>
-                      <div className="p-3 bg-secondary/50 rounded-lg">
-                        <div className="text-xs text-muted-foreground">Histoire-Géo</div>
-                        <div className="text-lg font-medium">15.5</div>
-                      </div>
-                      <div className="p-3 bg-secondary/50 rounded-lg">
-                        <div className="text-xs text-muted-foreground">Anglais</div>
-                        <div className="text-lg font-medium">14.0</div>
-                      </div>
-                    </div>
-                    
-                    <AppreciationGenerator 
-                      type="individual"
-                      studentName={selectedStudent.name}
-                      studentData={selectedStudent}
-                      maxChars={500} // Updated from 500 instead of previous value
-                      className="mb-0"
-                      analysisData={analysisData}
-                      onAppreciationGenerated={(appreciation) => handleAppreciationGenerated(selectedStudent.id, appreciation)}
-                    />
+            ) : (
+              <div className="glass-panel p-5 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium">Vue d'ensemble des appréciations</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={regenerateAllAppreciations}
+                      className="button-secondary flex items-center space-x-2 text-sm"
+                      title="Régénérer toutes les appréciations"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      <span>Tout régénérer</span>
+                    </button>
+                    <button
+                      onClick={() => toast.success("Impression lancée")}
+                      className="button-primary flex items-center space-x-2 text-sm"
+                      title="Imprimer les appréciations"
+                    >
+                      <Printer className="h-4 w-4" />
+                      <span>Imprimer</span>
+                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="glass-panel p-5 space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium">Vue d'ensemble des appréciations</h3>
-              <div className="flex space-x-2">
-                <button
-                  onClick={regenerateAllAppreciations}
-                  className="button-secondary flex items-center space-x-2 text-sm"
-                  title="Régénérer toutes les appréciations"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  <span>Tout régénérer</span>
-                </button>
-                <button
-                  onClick={() => toast.success("Impression lancée")}
-                  className="button-primary flex items-center space-x-2 text-sm"
-                  title="Imprimer les appréciations"
-                >
-                  <Printer className="h-4 w-4" />
-                  <span>Imprimer</span>
-                </button>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-secondary/50">
+                        <th className="p-3 text-left text-sm font-medium">Élève</th>
+                        <th className="p-3 text-left text-sm font-medium">Moyenne</th>
+                        <th className="p-3 text-left text-sm font-medium">Appréciation</th>
+                        <th className="p-3 text-center text-sm font-medium w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredStudents.map((student: any) => (
+                        <tr key={student.name} className="hover:bg-secondary/30 transition-colors">
+                          <td className="p-3">
+                            <div className="flex items-center">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full mr-2",
+                                getCategoryColor(student.average || 0)
+                                  .replace('bg-teal-100', 'bg-teal-500')
+                                  .replace('bg-green-100', 'bg-green-500')
+                                  .replace('bg-yellow-100', 'bg-yellow-500')
+                                  .replace('bg-red-100', 'bg-red-500')
+                              )}></div>
+                              <span className="font-medium">{student.name}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center">
+                              <span>{student.average?.toFixed(1) || "N/A"}</span>
+                              <span className="ml-1">{getTrendIcon(student)}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="text-sm text-muted-foreground max-w-xl">
+                              {appreciations[student.name] || 
+                                <span className="italic">Cliquez sur "Tout régénérer" pour créer les appréciations</span>
+                              }
+                            </div>
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="flex justify-center space-x-1">
+                              <button 
+                                onClick={() => {
+                                  setSelectedStudent(student);
+                                  setViewMode('single');
+                                }}
+                                className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                                title="Modifier"
+                              >
+                                <Grid className="h-4 w-4" />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  navigator.clipboard.writeText(appreciations[student.name] || '');
+                                  toast.success("Appréciation copiée");
+                                }}
+                                className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                                title="Copier"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-secondary/50">
-                    <th className="p-3 text-left text-sm font-medium">Élève</th>
-                    <th className="p-3 text-left text-sm font-medium">Moyenne</th>
-                    <th className="p-3 text-left text-sm font-medium">Appréciation</th>
-                    <th className="p-3 text-center text-sm font-medium w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filteredStudents.map((student) => (
-                    <tr key={student.id} className="hover:bg-secondary/30 transition-colors">
-                      <td className="p-3">
-                        <div className="flex items-center">
-                          <div className={cn(
-                            "w-2 h-2 rounded-full mr-2",
-                            student.category === 'excellent' && 'bg-teal-500',
-                            student.category === 'good' && 'bg-green-500',
-                            student.category === 'average' && 'bg-yellow-500',
-                            student.category === 'struggling' && 'bg-red-500',
-                          )}></div>
-                          <span className="font-medium">{student.name}</span>
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center">
-                          <span>{student.average}</span>
-                          <span className="ml-1">{getTrendIcon(student.trend)}</span>
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <div className="text-sm text-muted-foreground max-w-xl">
-                          {appreciations[student.id] || 
-                            <span className="italic">Cliquez sur "Tout régénérer" pour créer les appréciations</span>
-                          }
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="flex justify-center space-x-1">
-                          <button 
-                            onClick={() => {
-                              setSelectedStudent(student);
-                              setViewMode('single');
-                            }}
-                            className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                            title="Modifier"
-                          >
-                            <Grid className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={() => {
-                              navigator.clipboard.writeText(appreciations[student.id] || '');
-                              toast.success("Appréciation copiée");
-                            }}
-                            className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                            title="Copier"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            )}
+          </>
         )}
       </div>
     </Layout>

@@ -33,7 +33,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   studentName,
   studentData,
   classData,
-  maxChars = 500, // Default to 500 characters
+  maxChars = 500,
   analysisData,
   className,
   onAppreciationGenerated
