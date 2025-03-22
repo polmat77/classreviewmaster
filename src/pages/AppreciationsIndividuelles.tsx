@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
@@ -8,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { processGradeFiles } from '@/utils/data-processing';
+import { initPdfJs } from '@/utils/pdf-service';
 
 const AppreciationsIndividuelles = () => {
   // Replace mock data with data from analysis
@@ -22,6 +22,12 @@ const AppreciationsIndividuelles = () => {
   const [filter, setFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
   const [appreciations, setAppreciations] = useState<Record<string, string>>({});
+
+  // Initialize PDF.js when component mounts
+  useEffect(() => {
+    const cleanupPdfJs = initPdfJs();
+    return () => cleanupPdfJs();
+  }, []);
 
   // Extract students from analysis data or use empty array
   const students = analysisData?.currentTerm?.students || [];
@@ -67,6 +73,11 @@ const AppreciationsIndividuelles = () => {
     setAnalysisError(null);
     
     try {
+      // Show more descriptive processing message
+      toast.info("Traitement des fichiers PDF en cours... Cela peut prendre un moment.", {
+        duration: 10000,
+      });
+      
       const data = await processGradeFiles(individualReportFiles);
       console.log("Analysis complete, data available:", data);
       
