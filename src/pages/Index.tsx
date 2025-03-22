@@ -62,11 +62,18 @@ const Index = () => {
     console.log("Processing files - Current:", current, "Previous:", previous);
     
     try {
+      // Set a timeout to prevent UI from appearing stuck
+      const timeoutId = setTimeout(() => {
+        toast.info("L'analyse des fichiers prend plus de temps que prévu...");
+      }, 5000);
+      
       const data = await processGradeFiles([...current, ...previous]);
+      clearTimeout(timeoutId);
+      
       console.log("Processed data:", data);
       
-      if (!data) {
-        throw new Error("Le traitement des fichiers n'a pas produit de données");
+      if (!data || !data.currentTerm) {
+        throw new Error("Le traitement des fichiers n'a pas produit de données complètes");
       }
       
       setProcessedData(data);
@@ -74,8 +81,11 @@ const Index = () => {
       toast.success("Analyse des fichiers terminée");
     } catch (error) {
       console.error('Error processing files:', error);
-      toast.error("Erreur lors du traitement des fichiers");
-      setHasUploaded(false);
+      toast.error("Erreur lors du traitement des fichiers. Vérifiez le format de vos fichiers.");
+      // Don't reset hasUploaded if we already have data
+      if (!processedData) {
+        setHasUploaded(false);
+      }
     } finally {
       setIsLoading(false);
     }
