@@ -1,14 +1,15 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
-import { ChevronRight, Info, FileSpreadsheet, Upload, Table, Calendar, GraduationCap } from 'lucide-react';
+import { ChevronRight, Info, FileSpreadsheet, Upload, Table, Calendar, GraduationCap, BarChart2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { processGradeFiles, savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
 import { toast } from 'sonner';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
+import AnalysisUploader from '@/components/AnalysisUploader';
 
 const Index = () => {
   const [hasUploaded, setHasUploaded] = useState(false);
@@ -17,6 +18,7 @@ const Index = () => {
   const [currentGradeFiles, setCurrentGradeFiles] = useState<File[]>([]);
   const [previousGradeFiles, setPreviousGradeFiles] = useState<File[]>([]);
   const [savedPreviousFiles, setSavedPreviousFiles] = useState<any[]>([]);
+  const [showResults, setShowResults] = useState(false);
   
   useEffect(() => {
     const files = getPreviousGradeFiles();
@@ -28,28 +30,38 @@ const Index = () => {
   const handleCurrentFilesAccepted = (files: File[]) => {
     console.log("Current files accepted:", files);
     setCurrentGradeFiles(files);
+    setShowResults(false);
     
     const savedFiles = getPreviousGradeFiles();
     
     if ((savedFiles && savedFiles.length > 0) || previousGradeFiles.length > 0) {
-      processFiles(files, previousGradeFiles.length > 0 ? previousGradeFiles : []);
-    } else {
-      processFiles(files, []);
+      // We don't immediately process files anymore - wait for button click
+      // processFiles(files, previousGradeFiles.length > 0 ? previousGradeFiles : []);
     }
   };
   
   const handlePreviousFilesAccepted = (files: File[]) => {
     console.log("Previous files accepted:", files);
     setPreviousGradeFiles(files);
+    setShowResults(false);
     
     if (savePreviousGradeFiles(files)) {
       toast.success("Tableau des notes précédent enregistré");
       setSavedPreviousFiles(getPreviousGradeFiles());
-      
-      if (currentGradeFiles.length > 0) {
-        processFiles(currentGradeFiles, files);
-      }
     }
+  };
+  
+  const handleAnalyzeButtonClick = () => {
+    if (currentGradeFiles.length === 0) {
+      toast.error("Veuillez importer au moins un fichier de notes actuel");
+      return;
+    }
+    
+    const previousFiles = previousGradeFiles.length > 0 ? 
+      previousGradeFiles : 
+      (savedPreviousFiles && savedPreviousFiles.length > 0 ? savedPreviousFiles : []);
+    
+    processFiles(currentGradeFiles, previousFiles);
   };
   
   const processFiles = async (current: File[], previous: File[]) => {
@@ -59,6 +71,7 @@ const Index = () => {
     }
 
     setIsLoading(true);
+    setShowResults(false);
     console.log("Processing files - Current:", current, "Previous:", previous);
     
     try {
@@ -78,6 +91,7 @@ const Index = () => {
       
       setProcessedData(data);
       setHasUploaded(true);
+      setShowResults(true);
       toast.success("Analyse des fichiers terminée");
     } catch (error) {
       console.error('Error processing files:', error);
@@ -86,6 +100,7 @@ const Index = () => {
       if (!processedData) {
         setHasUploaded(false);
       }
+      setShowResults(false);
     } finally {
       setIsLoading(false);
     }
@@ -191,6 +206,18 @@ const Index = () => {
               />
             </div>
           </div>
+          
+          <div className="flex justify-center mt-6">
+            <Button 
+              onClick={handleAnalyzeButtonClick} 
+              className="bg-primary hover:bg-primary/90 text-white py-3 px-6 rounded-lg shadow-lg transition-all transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+              size="lg"
+              disabled={isLoading || currentGradeFiles.length === 0}
+            >
+              <BarChart2 className="mr-2 h-5 w-5" />
+              {isLoading ? 'Analyse en cours...' : 'Analyser les données'}
+            </Button>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -215,7 +242,17 @@ const Index = () => {
               </div>
             )}
             
-            {!isLoading && (currentGradeFiles.length > 0 || hasUploaded) && processedData && (
+            {!isLoading && (currentGradeFiles.length > 0 || hasUploaded) && !showResults && (
+              <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
+                <BarChart2 className="h-12 w-12 text-primary mb-4" />
+                <h3 className="text-lg font-medium mb-2">Prêt pour l'analyse</h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Cliquez sur le bouton "Analyser les données" pour visualiser les résultats.
+                </p>
+              </div>
+            )}
+            
+            {!isLoading && showResults && processedData && (
               <div className="space-y-6">
                 <h2 className="text-xl font-medium">Analyse préliminaire</h2>
                 <AnalyticsDashboard data={processedData} />
@@ -266,7 +303,7 @@ const Index = () => {
           </div>
         </div>
         
-        {hasUploaded && processedData && (
+        {hasUploaded && processedData && showResults && (
           <div className="flex justify-end">
             <Link 
               to="/appreciation-generale" 

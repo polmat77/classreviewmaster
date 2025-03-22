@@ -2,13 +2,23 @@
 import React, { useState, useEffect } from 'react';
 import FileUploader from '@/components/FileUploader';
 import { savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
+import { Button } from '@/components/ui/button';
+import { BarChart2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AnalysisUploaderProps {
   onFilesUploaded?: () => void;
+  onAnalyze?: () => void;
+  isLoading?: boolean;
+  hasCurrentFiles?: boolean;
 }
 
-const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({ onFilesUploaded }) => {
+const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({ 
+  onFilesUploaded,
+  onAnalyze,
+  isLoading,
+  hasCurrentFiles = false
+}) => {
   const [previousGradeTableFiles, setPreviousGradeTableFiles] = useState<File[]>([]);
   const [savedFiles, setSavedFiles] = useState<any[]>([]);
   
@@ -81,6 +91,20 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({ onFilesUploaded }) 
           <p className="text-xs text-muted-foreground mt-2">
             Ces fichiers seront utilisés pour l'analyse comparative dans toutes les sections de l'application.
           </p>
+        </div>
+      )}
+      
+      {onAnalyze && (
+        <div className="flex justify-center mt-4">
+          <Button 
+            onClick={onAnalyze} 
+            className="bg-primary hover:bg-primary/90 text-white py-3 px-6 rounded-lg shadow-lg transition-all transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+            size="lg"
+            disabled={isLoading || !hasCurrentFiles}
+          >
+            <BarChart2 className="mr-2 h-5 w-5" />
+            {isLoading ? 'Analyse en cours...' : 'Analyser les données'}
+          </Button>
         </div>
       )}
     </div>
