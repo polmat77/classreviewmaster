@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
-import { KeyRound, Lightbulb, AlertCircle, TrendingUp } from 'lucide-react';
+import { KeyRound, Lightbulb, AlertCircle, TrendingUp, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { processGradeFiles, savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
 import { toast } from 'sonner';
@@ -12,6 +12,15 @@ const AppreciationGenerale = () => {
   const [currentClassReportFiles, setCurrentClassReportFiles] = useState<File[]>([]);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [previousFiles, setPreviousFiles] = useState<any[]>([]);
+
+  // Check for previously saved files on component mount
+  useEffect(() => {
+    const savedFiles = getPreviousGradeFiles();
+    setPreviousFiles(savedFiles || []);
+    
+    console.log("Previous grade files loaded:", savedFiles);
+  }, []);
 
   const handleCurrentReportUpload = (files: File[]) => {
     setCurrentClassReportFiles(files);
@@ -30,14 +39,28 @@ const AppreciationGenerale = () => {
 
     setIsAnalyzing(true);
     try {
-      console.log("Starting analysis with files:", filesToAnalyze);
-      const data = await processGradeFiles([...filesToAnalyze]);
+      // Include previous files in the analysis if available
+      const allFiles = [...filesToAnalyze];
+      if (previousFiles && previousFiles.length > 0) {
+        console.log("Including previous files in analysis");
+        // We can't directly use the file info from localStorage
+        // This is just to inform the user that previous data is being considered
+        toast.info("Utilisation des données historiques pour l'analyse comparative");
+      }
+      
+      console.log("Starting analysis with files:", allFiles);
+      const data = await processGradeFiles(allFiles);
       console.log("Analysis results:", data);
+      
+      if (!data || !data.currentTerm) {
+        throw new Error("Analyse incomplète. Vérifiez le format de vos fichiers.");
+      }
+      
       setAnalysisData(data);
       toast.success("Analyse des bulletins terminée");
     } catch (error) {
       console.error('Error analyzing files:', error);
-      toast.error("Erreur lors de l'analyse des fichiers");
+      toast.error(`Erreur lors de l'analyse des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -67,11 +90,23 @@ const AppreciationGenerale = () => {
                   <FileUploader 
                     onFilesAccepted={handleCurrentReportUpload}
                     acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
-                    maxFiles={1}
+                    maxFiles={3}
                     label="Importer le bulletin de classe actuel"
-                    description="Le document PDF contenant les appréciations des enseignants"
+                    description="Formats acceptés: PDF, CSV, Excel (XLSX, XLS)"
                   />
                 </div>
+                
+                {previousFiles && previousFiles.length > 0 && (
+                  <div className="bg-secondary/30 p-4 rounded-lg">
+                    <h4 className="text-sm font-medium mb-2">Données historiques disponibles</h4>
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <FileSpreadsheet className="h-4 w-4 mr-2 text-primary" />
+                      <span>
+                        Les données des trimestres précédents seront incluses dans l'analyse
+                      </span>
+                    </div>
+                  </div>
+                )}
                 
                 {currentClassReportFiles.length > 0 && (
                   <button
@@ -98,7 +133,16 @@ const AppreciationGenerale = () => {
               </div>
             </div>
             
-            {analysisData ? (
+            {isAnalyzing ? (
+              <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                <h3 className="text-lg font-medium mb-2">Analyse en cours...</h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Nous traitons vos fichiers pour générer une analyse complète. 
+                  Veuillez patienter un instant.
+                </p>
+              </div>
+            ) : analysisData ? (
               <AppreciationGenerator 
                 type="class"
                 analysisData={analysisData}

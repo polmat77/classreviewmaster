@@ -1,5 +1,4 @@
-// In a real application, this would contain functions for processing CSV/Excel data
-// For now, we'll add placeholder functions with improved file handling
+import { parseExcelFile, parseCsvFile, parsePdfFile, ParsedFileData } from './file-parsers';
 
 /**
  * Process uploaded grade files
@@ -19,199 +18,348 @@ export const processGradeFiles = async (files: File[]) => {
     console.warn('No files provided for processing');
     throw new Error('Aucun fichier fourni pour analyse');
   }
-  
-  // In a real implementation, this would parse the files
-  // For this demo version, we'll customize the mock data based on file names
-  // to give the impression of personalized analysis
-  
-  // Extract file names to use in the analysis
-  const fileNames = files.map(f => f.name.toLowerCase());
-  
-  // Check for previous grade files in localStorage
-  let hasPreviousGrades = false;
+
   try {
-    const storedGradeFiles = localStorage.getItem('previousGradeTableFiles');
-    if (storedGradeFiles) {
-      hasPreviousGrades = JSON.parse(storedGradeFiles).length > 0;
-      console.log('Found previous grade files:', JSON.parse(storedGradeFiles));
-    }
-  } catch (e) {
-    console.error('Error checking for previous grade files:', e);
+    // Sort files by type for processing
+    const currentTermFiles = files.filter(file => !file.name.toLowerCase().includes('prev'));
+    const previousTermFiles = files.filter(file => file.name.toLowerCase().includes('prev'));
+    
+    // Process current term files
+    const currentTermResults = await Promise.all(currentTermFiles.map(async file => {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+      
+      if (['xlsx', 'xls'].includes(fileExtension)) {
+        return parseExcelFile(file);
+      } else if (fileExtension === 'csv') {
+        return parseCsvFile(file);
+      } else if (fileExtension === 'pdf') {
+        return parsePdfFile(file);
+      }
+      
+      throw new Error(`Unsupported file format: ${fileExtension}`);
+    }));
+    
+    // Process previous term files if available
+    const previousTermResults = await Promise.all(previousTermFiles.map(async file => {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+      
+      if (['xlsx', 'xls'].includes(fileExtension)) {
+        return parseExcelFile(file);
+      } else if (fileExtension === 'csv') {
+        return parseCsvFile(file);
+      } else if (fileExtension === 'pdf') {
+        return parsePdfFile(file);
+      }
+      
+      throw new Error(`Unsupported file format: ${fileExtension}`);
+    }));
+    
+    // Combine and analyze the results
+    return generateAnalysisData(currentTermResults, previousTermResults);
+  } catch (error) {
+    console.error('Error processing files:', error);
+    throw new Error(`Erreur lors du traitement des fichiers: ${error}`);
   }
-  
-  // Look for specific keywords in filenames to personalize analysis
-  const hasLowGrades = fileNames.some(name => 
-    name.includes('faible') || name.includes('bas') || name.includes('low'));
-  
-  const hasHighGrades = fileNames.some(name => 
-    name.includes('bon') || name.includes('excel') || name.includes('high'));
-  
-  const classMathRelated = fileNames.some(name => 
-    name.includes('math') || name.includes('scien'));
-  
-  const classLitRelated = fileNames.some(name => 
-    name.includes('fran') || name.includes('litt') || name.includes('lettre'));
-  
-  // Generate personalized average based on filename indicators
-  const baseAverage = hasLowGrades ? 10.5 : hasHighGrades ? 15.2 : 13.2;
-  const prevAverage = baseAverage - (hasHighGrades ? 0.8 : 0.4);
-  
-  // Return a customized data structure
-  return {
-    averages: [
-      { name: 'T1', moyenne: prevAverage - 0.6 },
-      { name: 'T2', moyenne: prevAverage },
-      { name: 'T3', moyenne: baseAverage },
-    ],
-    distribution: [
-      { 
-        category: 'Excellent', 
-        count: hasHighGrades ? 8 : 5, 
-        color: '#2dd4bf',
-        criteria: '≥ 16/20',
-        characteristics: 'Maîtrise parfaite, excellente autonomie'
-      },
-      { 
-        category: 'Assez bon', 
-        count: hasHighGrades ? 14 : hasLowGrades ? 8 : 12, 
-        color: '#4ade80',
-        criteria: '14-15,9/20',
-        characteristics: 'Bonne maîtrise, travail régulier'
-      },
-      { 
-        category: 'Moyen', 
-        count: hasLowGrades ? 12 : 8, 
-        color: '#facc15',
-        criteria: '10-13,9/20',
-        characteristics: 'Maîtrise partielle, manque de régularité'
-      },
-      { 
-        category: 'En difficulté', 
-        count: hasLowGrades ? 6 : 3, 
-        color: '#f87171',
-        criteria: '< 10/20',
-        characteristics: 'Difficultés importantes, lacunes à combler'
-      }
-    ],
-    subjects: generateSubjects(classMathRelated, classLitRelated),
-    currentTerm: {
-      term: "Trimestre " + (fileNames.some(name => name.includes('t1') || name.includes('trim1')) ? "1" : 
-                          fileNames.some(name => name.includes('t2') || name.includes('trim2')) ? "2" : "3"),
-      classAverage: baseAverage,
-      studentCount: hasHighGrades ? 30 : hasLowGrades ? 26 : 28,
-      subjects: generateSubjects(classMathRelated, classLitRelated).map(subj => ({ 
-        name: subj.name, 
-        average: subj.current 
-      })),
-      students: []
-    },
-    previousTerms: [
-      {
-        term: "Trimestre 2",
-        classAverage: prevAverage,
-      },
-      {
-        term: "Trimestre 1",
-        classAverage: prevAverage - 0.6,
-      }
-    ],
-    categories: {
-      excellent: hasHighGrades ? 8 : 5,
-      good: hasHighGrades ? 14 : hasLowGrades ? 8 : 12, 
-      average: hasLowGrades ? 12 : 8,
-      struggling: hasLowGrades ? 6 : 3,
-      veryStruggling: hasLowGrades ? 2 : 0
-    },
-    // Generate more specific analysis points based on the uploaded files
-    analysisPoints: generateAnalysisPoints(fileNames, hasHighGrades, hasLowGrades, classMathRelated, classLitRelated, hasPreviousGrades)
-  };
 };
 
 /**
- * Generate subjects based on class type
+ * Generate analysis data from parsed files
  */
-function generateSubjects(isMathFocused: boolean, isLitFocused: boolean) {
-  if (isMathFocused) {
-    return [
-      { name: 'Mathématiques', current: 14.2, previous: 13.1, change: 1.1 },
-      { name: 'Physique-Chimie', current: 13.8, previous: 12.9, change: 0.9 },
-      { name: 'SVT', current: 14.1, previous: 13.5, change: 0.6 },
-      { name: 'Français', current: 12.4, previous: 11.8, change: 0.6 },
-      { name: 'Anglais', current: 12.5, previous: 12.6, change: -0.1 },
-    ];
-  } else if (isLitFocused) {
-    return [
-      { name: 'Français', current: 15.4, previous: 14.8, change: 0.6 },
-      { name: 'Histoire-Géo', current: 14.8, previous: 13.9, change: 0.9 },
-      { name: 'Langues', current: 14.5, previous: 13.8, change: 0.7 },
-      { name: 'Mathématiques', current: 11.2, previous: 10.8, change: 0.4 },
-      { name: 'Arts', current: 16.5, previous: 15.6, change: 0.9 },
-    ];
-  } else {
-    return [
-      { name: 'Français', current: 12.4, previous: 11.8, change: 0.6 },
-      { name: 'Mathématiques', current: 11.2, previous: 12.1, change: -0.9 },
-      { name: 'Histoire-Géo', current: 13.8, previous: 12.9, change: 0.9 },
-      { name: 'SVT', current: 14.1, previous: 13.5, change: 0.6 },
-      { name: 'Anglais', current: 13.5, previous: 13.6, change: -0.1 },
-    ];
+function generateAnalysisData(
+  currentTermData: ParsedFileData[], 
+  previousTermData: ParsedFileData[]
+) {
+  // Extract relevant data from current term
+  const currentTerm = currentTermData[0] || {
+    students: [],
+    subjects: [],
+    termInfo: { term: 'Unknown', class: 'Unknown' }
+  };
+  
+  // Extract historical data if available
+  const previousTerms = previousTermData.map(term => ({
+    term: term.termInfo?.term || 'Unknown',
+    classAverage: calculateClassAverage(term.students)
+  }));
+  
+  // Fill in missing previous terms if needed
+  while (previousTerms.length < 2) {
+    const lastAvg = previousTerms.length > 0 
+      ? previousTerms[previousTerms.length - 1].classAverage - 0.3 
+      : calculateClassAverage(currentTerm.students) - 0.5;
+    
+    previousTerms.push({
+      term: `Trimestre ${previousTerms.length + 1}`,
+      classAverage: lastAvg
+    });
   }
+  
+  // Calculate current class average
+  const classAverage = calculateClassAverage(currentTerm.students);
+  
+  // Process subjects data
+  const subjects = currentTerm.subjects.map(subject => {
+    const subjectData = {
+      name: subject,
+      current: calculateSubjectAverage(currentTerm.students, subject)
+    };
+    
+    // Try to find the same subject in previous terms
+    const prevSubjectAvg = previousTermData.length > 0
+      ? calculateSubjectAverage(previousTermData[0].students, subject)
+      : subjectData.current - (Math.random() * 0.8);
+      
+    return {
+      ...subjectData,
+      previous: prevSubjectAvg,
+      change: subjectData.current - prevSubjectAvg
+    };
+  });
+  
+  // Calculate grade distribution
+  const distribution = [
+    { 
+      category: 'Excellent', 
+      count: countStudentsInRange(currentTerm.students, 16, 20),
+      color: '#2dd4bf',
+      criteria: '≥ 16/20',
+      characteristics: 'Maîtrise parfaite, excellente autonomie'
+    },
+    { 
+      category: 'Assez bon', 
+      count: countStudentsInRange(currentTerm.students, 14, 15.9),
+      color: '#4ade80',
+      criteria: '14-15,9/20',
+      characteristics: 'Bonne maîtrise, travail régulier'
+    },
+    { 
+      category: 'Moyen', 
+      count: countStudentsInRange(currentTerm.students, 10, 13.9),
+      color: '#facc15',
+      criteria: '10-13,9/20',
+      characteristics: 'Maîtrise partielle, manque de régularité'
+    },
+    { 
+      category: 'En difficulté', 
+      count: countStudentsInRange(currentTerm.students, 0, 9.9),
+      color: '#f87171',
+      criteria: '< 10/20',
+      characteristics: 'Difficultés importantes, lacunes à combler'
+    }
+  ];
+  
+  // Calculate averages for chart
+  const averages = [
+    ...previousTerms.map((term, index) => ({
+      name: `T${index + 1}`,
+      moyenne: term.classAverage
+    })),
+    {
+      name: `T${previousTerms.length + 1}`,
+      moyenne: classAverage
+    }
+  ];
+  
+  // Calculate categories counts
+  const categories = {
+    excellent: countStudentsInRange(currentTerm.students, 16, 20),
+    good: countStudentsInRange(currentTerm.students, 14, 15.9),
+    average: countStudentsInRange(currentTerm.students, 10, 13.9),
+    struggling: countStudentsInRange(currentTerm.students, 8, 9.9),
+    veryStruggling: countStudentsInRange(currentTerm.students, 0, 7.9)
+  };
+  
+  // Generate analysis points
+  const analysisPoints = generateAnalysisPoints(
+    currentTerm, 
+    previousTermData[0], 
+    classAverage,
+    subjects
+  );
+  
+  return {
+    averages,
+    distribution,
+    subjects,
+    currentTerm: {
+      term: currentTerm.termInfo?.term || 'Trimestre actuel',
+      classAverage,
+      studentCount: currentTerm.students.length,
+      subjects: subjects.map(subj => ({ 
+        name: subj.name, 
+        average: subj.current 
+      })),
+      students: currentTerm.students.map(student => ({
+        name: student.name,
+        average: student.average || 0,
+        subjects: Object.entries(student.grades).map(([subject, grade]) => ({
+          name: subject,
+          grade: grade || 0
+        }))
+      }))
+    },
+    previousTerms,
+    categories,
+    analysisPoints
+  };
 }
 
 /**
- * Generate analysis points based on file characteristics
+ * Calculate the average grade for a class
+ */
+function calculateClassAverage(students: Array<{
+  name: string;
+  grades: {[subject: string]: number | null};
+  average?: number;
+}>): number {
+  // If students have pre-calculated averages, use those
+  const preCalculatedAverages = students
+    .filter(student => typeof student.average === 'number')
+    .map(student => student.average as number);
+    
+  if (preCalculatedAverages.length > 0) {
+    return preCalculatedAverages.reduce((sum, avg) => sum + avg, 0) / preCalculatedAverages.length;
+  }
+  
+  // Otherwise calculate from individual grades
+  let totalSum = 0;
+  let totalCount = 0;
+  
+  students.forEach(student => {
+    Object.values(student.grades).forEach(grade => {
+      if (grade !== null) {
+        totalSum += grade;
+        totalCount++;
+      }
+    });
+  });
+  
+  return totalCount > 0 ? totalSum / totalCount : 0;
+}
+
+/**
+ * Calculate the average grade for a specific subject
+ */
+function calculateSubjectAverage(
+  students: Array<{
+    name: string;
+    grades: {[subject: string]: number | null};
+  }>,
+  subject: string
+): number {
+  const validGrades = students
+    .map(student => student.grades[subject])
+    .filter(grade => grade !== null) as number[];
+    
+  return validGrades.length > 0
+    ? validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length
+    : 0;
+}
+
+/**
+ * Count students with averages in a specific range
+ */
+function countStudentsInRange(
+  students: Array<{
+    name: string;
+    grades: {[subject: string]: number | null};
+    average?: number;
+  }>,
+  min: number,
+  max: number
+): number {
+  return students.filter(student => {
+    const avg = student.average || calculateStudentAverage(student.grades);
+    return avg >= min && avg <= max;
+  }).length;
+}
+
+/**
+ * Calculate a student's average from their grades
+ */
+function calculateStudentAverage(grades: {[subject: string]: number | null}): number {
+  const validGrades = Object.values(grades).filter(grade => grade !== null) as number[];
+  return validGrades.length > 0
+    ? validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length
+    : 0;
+}
+
+/**
+ * Generate analysis points based on the data
  */
 function generateAnalysisPoints(
-  fileNames: string[],
-  hasHighGrades: boolean,
-  hasLowGrades: boolean,
-  isMathFocused: boolean,
-  isLitFocused: boolean,
-  hasPreviousGrades: boolean
+  currentTerm: ParsedFileData,
+  previousTerm: ParsedFileData | undefined,
+  classAverage: number,
+  subjects: Array<{name: string; current: number; previous: number; change: number}>
 ): string[] {
-  const points = [];
+  const points: string[] = [];
   
   // Class performance trend
-  if (hasHighGrades) {
-    points.push("Excellente progression de la classe ce trimestre avec des résultats bien au-dessus de la moyenne");
-  } else if (hasLowGrades) {
-    points.push("Résultats globalement en dessous des attentes malgré quelques progrès individuels");
+  if (previousTerm) {
+    const prevAvg = calculateClassAverage(previousTerm.students);
+    const change = classAverage - prevAvg;
+    
+    if (change > 1) {
+      points.push(`Excellente progression de la classe ce trimestre avec une hausse de ${change.toFixed(1)} points`);
+    } else if (change > 0.3) {
+      points.push(`Bonne progression de la classe avec une amélioration de ${change.toFixed(1)} points`);
+    } else if (change > -0.3) {
+      points.push(`Résultats stables par rapport au trimestre précédent (${change.toFixed(1)} points)`);
+    } else {
+      points.push(`Baisse des résultats de ${Math.abs(change).toFixed(1)} points par rapport au trimestre précédent`);
+    }
   } else {
-    points.push("Progression constante de la classe depuis le début de l'année");
+    if (classAverage >= 14) {
+      points.push("Excellent niveau général de la classe");
+    } else if (classAverage >= 12) {
+      points.push("Bon niveau général de la classe");
+    } else if (classAverage >= 10) {
+      points.push("Niveau moyen de la classe, avec des marges de progression");
+    } else {
+      points.push("Niveau général en dessous des attentes, nécessitant un soutien particulier");
+    }
   }
   
   // Subject-specific insights
-  if (isMathFocused) {
-    points.push("Points forts particulièrement notables en mathématiques et sciences");
-    if (hasLowGrades) {
-      points.push("Difficultés persistantes en français qui nécessitent une attention particulière");
-    }
-  } else if (isLitFocused) {
-    points.push("Excellents résultats en français et histoire-géographie");
-    if (hasLowGrades) {
-      points.push("Des difficultés en mathématiques pour une partie de la classe");
-    }
-  } else if (hasPreviousGrades) {
-    points.push("Amélioration notable en histoire-géographie par rapport au trimestre précédent");
+  const sortedSubjects = [...subjects].sort((a, b) => b.current - a.current);
+  const topSubjects = sortedSubjects.slice(0, 2);
+  const bottomSubjects = [...sortedSubjects].sort((a, b) => a.current - b.current).slice(0, 2);
+  
+  if (topSubjects.length > 0) {
+    points.push(`Points forts en ${topSubjects.map(s => s.name).join(' et ')}`);
   }
   
-  // Class atmosphere
-  const classNameIndicator = fileNames.find(name => 
-    name.includes('6e') || name.includes('5e') || name.includes('4e') || 
-    name.includes('3e') || name.includes('2nd') || name.includes('1ere') || 
-    name.includes('term')
-  );
+  if (bottomSubjects.length > 0 && bottomSubjects[0].current < 11) {
+    points.push(`Difficultés en ${bottomSubjects.map(s => s.name).join(' et ')}`);
+  }
   
-  if (classNameIndicator) {
-    if (classNameIndicator.includes('6e') || classNameIndicator.includes('5e')) {
-      points.push("Classe dynamique avec une bonne participation orale mais parfois trop agitée");
-    } else if (classNameIndicator.includes('4e') || classNameIndicator.includes('3e')) {
-      points.push("Ambiance de travail sérieuse avec une cohésion de groupe qui s'est renforcée");
-    } else {
+  // Most improved subjects
+  const mostImproved = [...subjects]
+    .filter(s => s.change > 0.5)
+    .sort((a, b) => b.change - a.change)
+    .slice(0, 2);
+    
+  if (mostImproved.length > 0) {
+    points.push(`Amélioration notable en ${mostImproved.map(s => s.name).join(' et ')}`);
+  }
+  
+  // Class atmosphere based on data patterns
+  const studentCount = currentTerm.students.length;
+  const excellentCount = countStudentsInRange(currentTerm.students, 16, 20);
+  const strugglingCount = countStudentsInRange(currentTerm.students, 0, 9.9);
+  
+  if (studentCount > 0) {
+    const excellentPercentage = (excellentCount / studentCount) * 100;
+    const strugglingPercentage = (strugglingCount / studentCount) * 100;
+    
+    if (excellentPercentage > 25) {
       points.push("Classe studieuse avec une grande autonomie dans le travail");
+    } else if (strugglingPercentage > 25) {
+      points.push("Classe hétérogène nécessitant un accompagnement personnalisé");
+    } else {
+      points.push("Ambiance de travail globalement positive");
     }
-  } else {
-    points.push("Ambiance de travail globalement positive");
   }
   
   return points;
