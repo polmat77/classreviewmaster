@@ -1,11 +1,12 @@
-
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
-import { Search, Filter, RefreshCw, Save, UserPlus, Printer, FileText, List, Grid, Copy } from 'lucide-react';
+import { Search, Filter, RefreshCw, Save, UserPlus, Printer, FileText, List, Grid, Copy, BarChart, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { processGradeFiles } from '@/utils/data-processing';
 
 // Mock data for student list
 const mockStudents = [
@@ -26,6 +27,8 @@ const AppreciationsIndividuelles = () => {
   const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
   const [individualReportFiles, setIndividualReportFiles] = useState<File[]>([]);
   const [appreciations, setAppreciations] = useState<Record<number, string>>({});
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisData, setAnalysisData] = useState<any>(null);
   
   const filteredStudents = mockStudents.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -35,7 +38,34 @@ const AppreciationsIndividuelles = () => {
   
   const handleIndividualReportUpload = (files: File[]) => {
     setIndividualReportFiles(files);
+    setAnalysisData(null); // Reset analysis when new files are uploaded
     toast.success("Bulletins individuels importés avec succès");
+  };
+  
+  const handleAnalyzeData = async () => {
+    if (individualReportFiles.length === 0) {
+      toast.error("Veuillez d'abord importer des fichiers");
+      return;
+    }
+    
+    setIsAnalyzing(true);
+    
+    try {
+      const data = await processGradeFiles(individualReportFiles);
+      setAnalysisData(data);
+      toast.success("Analyse des données terminée avec succès");
+      
+      // Update student data based on the analysis
+      if (data && data.currentTerm && data.currentTerm.students) {
+        // Process and use the real data
+        console.log("Analysis complete, data available:", data);
+      }
+    } catch (error) {
+      console.error("Error analyzing data:", error);
+      toast.error("Erreur lors de l'analyse des données");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
   
   const regenerateAllAppreciations = () => {
@@ -119,6 +149,34 @@ const AppreciationsIndividuelles = () => {
             label="Importer les bulletins individuels"
             description="Documents PDF, Excel ou CSV contenant les bulletins par élève"
           />
+          
+          <div className="flex justify-center mt-4">
+            <Button 
+              onClick={handleAnalyzeData} 
+              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300"
+              size="lg"
+              disabled={individualReportFiles.length === 0 || isAnalyzing}
+            >
+              {isAnalyzing ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                  Analyse en cours...
+                </>
+              ) : (
+                <>
+                  <BarChart className="mr-2 h-5 w-5" />
+                  Analyser les données
+                </>
+              )}
+            </Button>
+          </div>
+          
+          {analysisData && (
+            <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30 rounded-md text-sm flex items-center text-green-700 dark:text-green-400">
+              <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              Analyse terminée ! Utilisez les données réelles des étudiants pour générer des appréciations.
+            </div>
+          )}
         </div>
         
         <div className="flex justify-between items-center">
@@ -295,6 +353,7 @@ const AppreciationsIndividuelles = () => {
                       studentData={selectedStudent}
                       maxChars={500} // Updated from 500 instead of previous value
                       className="mb-0"
+                      analysisData={analysisData}
                       onAppreciationGenerated={(appreciation) => handleAppreciationGenerated(selectedStudent.id, appreciation)}
                     />
                   </div>

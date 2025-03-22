@@ -82,7 +82,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
     }
 
     // Check if we have analysis data
-    if (!analysisData && !classData) {
+    if (!analysisData && !studentData && !classData) {
       toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer et analyser des fichiers.");
       return;
     }
@@ -105,14 +105,19 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
         );
       } else {
         // Generate individual appreciation using OpenAI
-        if (!studentName || !studentData) {
+        if (!studentName) {
           throw new Error('Données élève manquantes');
         }
         
-        console.log("Using student data for OpenAI:", { studentName, studentData });
+        // Use analysis data if available, otherwise use the mock student data
+        const dataForGeneration = analysisData ? 
+          { ...studentData, analysisData } : 
+          studentData;
+        
+        console.log("Using student data for OpenAI:", { studentName, data: dataForGeneration });
         result = await OpenAIService.generateStudentAppreciation(
           studentName,
-          studentData,
+          dataForGeneration,
           tone,
           length[0]
         );
