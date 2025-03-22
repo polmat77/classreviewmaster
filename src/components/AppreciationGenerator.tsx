@@ -241,28 +241,40 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <h4 className="text-sm font-medium">Résultat</h4>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={copyToClipboard}
-                  className="h-8"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="mr-2 h-3 w-3" />
-                      Copié
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="mr-2 h-3 w-3" />
-                      Copier
-                    </>
-                  )}
-                </Button>
+                <div className="flex items-center gap-4">
+                  <div className="text-xs text-muted-foreground">
+                    <span className={cn(
+                      "font-semibold",
+                      maxChars && appreciation.length > maxChars * 0.8 ? "text-amber-500" : "",
+                      maxChars && appreciation.length >= maxChars ? "text-red-500" : ""
+                    )}>
+                      {appreciation.length}
+                    </span>
+                    {maxChars && <span>/{maxChars} caractères</span>}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={copyToClipboard}
+                    className="h-8"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="mr-2 h-3 w-3" />
+                        Copié
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="mr-2 h-3 w-3" />
+                        Copier
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
               
               <div className={cn(
-                "p-3 rounded-md bg-muted text-sm transition-opacity h-auto whitespace-pre-wrap overflow-y-auto max-h-[400px]",
+                "p-4 rounded-md bg-muted text-sm transition-opacity whitespace-pre-wrap",
                 isGenerating && "opacity-50"
               )}>
                 {appreciation}
@@ -276,4 +288,3 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
 };
 
 export default AppreciationGenerator;
-
