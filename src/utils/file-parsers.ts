@@ -1,1421 +1,1059 @@
-import * as XLSX from 'xlsx';
-import Papa from 'papaparse';
-import * as pdfjsLib from 'pdfjs-dist';
 
-// Define a common interface for parsed data to ensure consistent structure
+import * as XLSX from 'xlsx';
+import * as Papa from 'papaparse';
+import * as pdfjs from 'pdfjs-dist';
+import { toast } from 'sonner';
+
+// Define the shape of the data parsed from files
 export interface ParsedFileData {
   students: Array<{
     name: string;
-    grades: {
-      [subject: string]: number | null;
-    };
+    grades: { [subject: string]: number | null };
     average?: number;
-    comments?: {
-      [subject: string]: string;
-    };
-    teacherNames?: {
-      [subject: string]: string;
-    };
-    classAvg?: {
-      [subject: string]: number | null;
-    };
+    comments?: { [subject: string]: string };
+    teacherNames?: { [subject: string]: string };
+    classAvg?: { [subject: string]: number | null };
   }>;
   subjects: string[];
   termInfo?: {
-    term: string;
-    year?: string;
+    term?: string;
     class?: string;
     schoolName?: string;
   };
 }
 
-/**
- * Parse Excel files (.xlsx, .xls)
- */
+// Main function to parse Excel files
 export const parseExcelFile = async (file: File): Promise<ParsedFileData> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Assume first sheet contains the data
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
-        // Convert to JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const excelData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        console.log('Parsed Excel data:', excelData);
         
-        // Extract student and grade information
-        const result = processTabularData(jsonData);
+        // Process the excel data into the required format
+        const result = processExcelData(excelData as any[][]);
         resolve(result);
       } catch (error) {
         console.error('Error parsing Excel file:', error);
-        reject(new Error('Failed to parse Excel file'));
+        reject(new Error(`Erreur lors de l'analyse du fichier Excel: ${error}`));
       }
     };
     
     reader.onerror = () => {
-      reject(new Error('Failed to read Excel file'));
+      reject(new Error("Erreur lors de la lecture du fichier Excel"));
     };
     
     reader.readAsArrayBuffer(file);
   });
 };
 
-/**
- * Parse CSV files
- */
-export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
-  return new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      header: true,
-      complete: (results) => {
-        try {
-          const result = processTabularData(results.data);
-          resolve(result);
-        } catch (error) {
-          console.error('Error processing CSV data:', error);
-          reject(new Error('Failed to process CSV data'));
-        }
-      },
-      error: (error) => {
-        console.error('Error parsing CSV file:', error);
-        reject(new Error('Failed to parse CSV file'));
-      }
-    });
-  });
-};
-
-/**
- * Parse PDF files using PDF.js
- * Enhanced to better extract structured data for AI analysis
- */
-export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
-  try {
-    // Set the worker source for PDF.js
-    const pdfjsWorker = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-    
-    // Load the PDF file
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    
-    let allText = '';
-    let allTextItems: any[] = [];
-    
-    // Extract text and positions from all pages
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      
-      // Extract text content with positions
-      const textContent = await page.getTextContent();
-      allTextItems = [...allTextItems, ...textContent.items];
-      
-      // Also keep the full text for fallback processing
-      const pageText = textContent.items.map((item: any) => item.str).join(' ');
-      allText += pageText + '\n';
-    }
-    
-    console.log("PDF parsing started for file:", file.name);
-    
-    // Try to detect if this is a French bulletin format (like in the image)
-    if (isFrenchBulletinFormat(allText)) {
-      console.log("Detected French bulletin format, using specialized parser");
-      return parseFrenchBulletin(allTextItems, allText, file.name);
-    }
-    
-    // For other formats, try the table extraction approach
-    const extractedTables = extractTablesFromTextItems(allTextItems);
-    if (extractedTables.length > 0) {
-      console.log("Tables detected in PDF, attempting structured parsing");
-      return processExtractedTables(extractedTables, allText, file.name);
-    }
-    
-    // Fall back to processing as unstructured text
-    console.log("No tables detected, processing as unstructured text");
-    return processPdfText(allText, file.name);
-  } catch (error) {
-    console.error('Error parsing PDF file:', error);
-    // Return fallback data if parsing fails completely
-    return createFallbackData(file.name);
+// Function to process Excel data
+function processExcelData(data: any[][]): ParsedFileData {
+  // Try to detect different Excel formats (French bulletin, raw grades, etc.)
+  if (detectFrenchBulletinFormat(data)) {
+    return parseFrenchBulletinFormat(data);
   }
-};
 
-/**
- * Detect if the PDF follows a French bulletin format
- */
-function isFrenchBulletinFormat(text: string): boolean {
-  // Look for key indicators of French bulletin format
-  const frenchBulletinPatterns = [
-    /bulletin du \d+[èeé]me trimestre/i,
-    /appr[ée]ciations/i,
-    /mati[èe]res/i,
-    /moyennes/i,
-    /[ée]l[èe]ve/i,
-    /professeur/i,
-    /moyenne[s]? g[ée]n[ée]rale[s]?/i,
-  ];
-  
-  // If multiple patterns match, it's likely a French bulletin
-  return frenchBulletinPatterns.filter(pattern => pattern.test(text)).length >= 3;
+  // For a raw grade table, try to determine standard structure
+  return parseStandardGradeTable(data);
 }
 
-/**
- * Parse French bulletin format specifically
- */
-function parseFrenchBulletin(
-  textItems: any[], 
-  fullText: string,
-  filename: string
-): ParsedFileData {
-  try {
-    console.log("Starting specialized French bulletin parsing");
-    
-    // Extract student name
-    let studentName = "";
-    const nameMatch = fullText.match(/([A-Z]{2,}\s+[A-Za-zÀ-ÿ]+|[A-Za-zÀ-ÿ]+\s+[A-Z]{2,})/);
-    if (nameMatch) {
-      studentName = nameMatch[0].trim();
-    }
-    
-    // Try alternate pattern if no match found
-    if (!studentName) {
-      const altNameMatch = fullText.match(/([A-Z][a-zÀ-ÿ]+\s+[A-Z][a-zÀ-ÿ]+)/);
-      if (altNameMatch) {
-        studentName = altNameMatch[0].trim();
-      }
-    }
-    
-    // Check for name in a specific format like in the image (AELTERS Sarah)
-    if (!studentName) {
-      const bulletinNameMatch = fullText.match(/([A-Z]+\s+[A-Za-zÀ-ÿ]+)/);
-      if (bulletinNameMatch) {
-        studentName = bulletinNameMatch[0].trim();
-      }
-    }
-    
-    console.log("Extracted student name:", studentName);
-    
-    // Extract trimester information
-    let term = "Trimestre 1";
-    const trimMatch = fullText.match(/trimestre|Trimestre/i);
-    if (trimMatch) {
-      const numberMatch = fullText.match(/(\d+)[èeé]me\s+[Tt]rimestre/);
-      if (numberMatch && numberMatch[1]) {
-        term = `Trimestre ${numberMatch[1]}`;
-      }
-    }
-    
-    // Extract year
-    let year = "";
-    const yearMatch = fullText.match(/(\d{4})[\/\-](\d{4})/);
-    if (yearMatch) {
-      year = `${yearMatch[1]}-${yearMatch[2]}`;
-    } else {
-      const singleYearMatch = fullText.match(/20\d{2}/);
-      if (singleYearMatch) {
-        const yearNum = parseInt(singleYearMatch[0]);
-        year = `${yearNum}-${yearNum + 1}`;
-      }
-    }
-    
-    // Extract school name
-    let schoolName = "";
-    const schoolLines = fullText.split('\n').slice(0, 5); // Check first few lines
-    for (const line of schoolLines) {
-      if (line.includes("COLLEGE") || line.includes("LYCEE") || line.includes("ECOLE")) {
-        schoolName = line.trim();
-        break;
-      }
-    }
-    
-    // Extract class information
-    let className = "";
-    const classMatch = fullText.match(/classe\s*:\s*([^\n]+)/i) || 
-                      fullText.match(/(\d+[A-Z]\d*)/);
-    if (classMatch) {
-      className = classMatch[1].trim();
-    }
-    
-    // Extract subjects, grades, and comments using position-based analysis
-    // Group text items by rows (items with similar y-positions)
-    const rows = groupTextItemsByRows(textItems);
-    
-    // Find the header row that contains subject column headers
-    const headerRowIndex = findHeaderRowIndex(rows);
-    
-    // Extract subject data
-    const subjects: string[] = [];
-    const studentGrades: {[subject: string]: number | null} = {};
-    const classGrades: {[subject: string]: number | null} = {};
-    const comments: {[subject: string]: string} = {};
-    const teacherNames: {[subject: string]: string} = {};
-    
-    // Process data rows after the header
-    if (headerRowIndex !== -1) {
-      // First, identify column structure from the header row
-      const headerColumns = identifyColumnStructure(rows[headerRowIndex]);
-      
-      // Process each data row
-      for (let i = headerRowIndex + 1; i < rows.length; i++) {
-        const row = rows[i];
-        
-        // Skip rows that are too short
-        if (row.length < 3) continue;
-        
-        // Extract subject name from the first column
-        const subjectText = extractTextFromColumn(row, headerColumns.subjectCol);
-        
-        // Skip rows without clear subject name
-        if (!subjectText || subjectText.length < 3 || 
-            /moyenne|general|option/i.test(subjectText)) continue;
-            
-        subjects.push(subjectText);
-        
-        // Extract teacher name if available
-        const teacherText = extractTeacherName(row, subjectText);
-        if (teacherText) {
-          teacherNames[subjectText] = teacherText;
-        }
-        
-        // Extract student grade
-        const studentGradeText = extractTextFromColumn(row, headerColumns.studentGradeCol);
-        const studentGrade = parseGrade(studentGradeText);
-        studentGrades[subjectText] = studentGrade;
-        
-        // Extract class average grade
-        const classGradeText = extractTextFromColumn(row, headerColumns.classGradeCol);
-        const classGrade = parseGrade(classGradeText);
-        classGrades[subjectText] = classGrade;
-        
-        // Extract comment if available
-        const commentText = extractTextFromColumn(row, headerColumns.commentCol);
-        if (commentText && commentText.length > 10) {
-          comments[subjectText] = commentText;
-        }
-      }
-    } else {
-      // If header row not found, try fallback extraction methods
-      extractSubjectsAndGradesFromText(fullText, subjects, studentGrades, comments);
-    }
-    
-    // Extract overall average
-    let average: number | undefined;
-    const avgMatch = fullText.match(/moyenne[s]?\s*g[ée]n[ée]rale[s]?\s*[:\s]+(\d+[.,]\d+)/i);
-    if (avgMatch) {
-      average = parseFloat(avgMatch[1].replace(',', '.'));
-    } else {
-      // Look for a number near "moyenne générale"
-      const generalAvgItems = textItems.filter((item: any) => 
-        /moyenne[s]?\s*g[ée]n[ée]rale[s]?/i.test(item.str)
-      );
-      
-      if (generalAvgItems.length > 0) {
-        const generalAvgItem = generalAvgItems[0];
-        const nearbyNumberItems = textItems.filter((item: any) => {
-          const distance = Math.sqrt(
-            Math.pow(item.transform[4] - generalAvgItem.transform[4], 2) + 
-            Math.pow(item.transform[5] - generalAvgItem.transform[5], 2)
-          );
-          return distance < 100 && /^\d+[.,]\d+$/.test(item.str);
-        });
-        
-        if (nearbyNumberItems.length > 0) {
-          average = parseFloat(nearbyNumberItems[0].str.replace(',', '.'));
-        }
-      }
-    }
-    
-    // If no average found, calculate from grades
-    if (!average && Object.keys(studentGrades).length > 0) {
-      const validGrades = Object.values(studentGrades).filter(g => g !== null) as number[];
-      if (validGrades.length > 0) {
-        average = validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length;
-      }
-    }
-    
-    console.log("Extracted subjects:", subjects);
-    console.log("Extracted student grades:", studentGrades);
-    console.log("Extracted student average:", average);
-    
-    return {
-      students: [{
-        name: studentName || `Élève de ${filename}`,
-        grades: studentGrades,
-        average,
-        comments,
-        teacherNames,
-        classAvg: classGrades
-      }],
-      subjects,
-      termInfo: {
-        term,
-        year,
-        class: className,
-        schoolName
-      }
-    };
-  } catch (error) {
-    console.error("Error in French bulletin parsing:", error);
-    return createFallbackData(filename);
-  }
+// Detect if the Excel follows French bulletin format
+function detectFrenchBulletinFormat(data: any[][]): boolean {
+  // Look for typical French bulletin headers or structures
+  const headers = data[0] || [];
+  const firstRowStr = headers.join(' ').toLowerCase();
+  
+  return firstRowStr.includes('bulletin') || 
+         firstRowStr.includes('élève') || 
+         firstRowStr.includes('trimestre');
 }
 
-/**
- * Group text items by rows based on y-position
- */
-function groupTextItemsByRows(items: any[]): any[][] {
-  // Sort items by y-position (top to bottom)
-  const sortedItems = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
+// Parse French bulletin format
+function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
+  // Implementation specific to French bulletin format
+  // This would need to be adapted based on the exact structure
+  const subjects: string[] = [];
+  let studentName = '';
+  let className = '';
+  let termName = '';
+  let schoolName = '';
   
-  const rows: any[][] = [];
-  let currentRow: any[] = [];
-  let currentY: number | null = null;
-  const yThreshold = 5; // Items within this y-distance are considered the same row
-  
-  sortedItems.forEach(item => {
-    const y = Math.round(item.transform[5]);
+  // Extract school name, term and class info from top rows
+  for (let i = 0; i < 5; i++) {
+    const rowStr = data[i]?.join(' ') || '';
     
-    // If this is a new row or the first item
-    if (currentY === null || Math.abs(y - currentY) > yThreshold) {
-      if (currentRow.length > 0) {
-        // Sort items in the row by x-position (left to right)
-        currentRow.sort((a, b) => a.transform[4] - b.transform[4]);
-        rows.push(currentRow);
+    if (rowStr.includes('Collège') || rowStr.includes('Lycée') || rowStr.includes('École')) {
+      schoolName = rowStr.trim();
+    }
+    
+    if (rowStr.toLowerCase().includes('trimestre')) {
+      // Extract trimester info
+      const trimMatch = rowStr.match(/trimestre\s*(\d)/i);
+      if (trimMatch) {
+        termName = `Trimestre ${trimMatch[1]}`;
       }
-      currentRow = [item];
-      currentY = y;
-    } else {
-      currentRow.push(item);
+    }
+    
+    if (rowStr.toLowerCase().includes('classe') || rowStr.includes('ème') || rowStr.includes('nde')) {
+      className = rowStr.trim();
+    }
+    
+    if (rowStr.toLowerCase().includes('élève:') || rowStr.toLowerCase().includes('élève :')) {
+      // Extract student name
+      const nameMatch = rowStr.match(/élève\s*:\s*(.+)/i);
+      if (nameMatch) {
+        studentName = nameMatch[1].trim();
+      }
+    }
+  }
+  
+  // Find where the grades table starts
+  let tableStartIndex = 0;
+  for (let i = 0; i < data.length; i++) {
+    const rowStr = data[i]?.join(' ').toLowerCase() || '';
+    if (rowStr.includes('matière') || 
+        rowStr.includes('discipline') || 
+        rowStr.includes('moyenne') || 
+        rowStr.includes('enseignant')) {
+      tableStartIndex = i;
+      break;
+    }
+  }
+  
+  // Extract headers
+  const headers = data[tableStartIndex] || [];
+  let subjectColIndex = -1;
+  let gradeColIndex = -1;
+  let commentColIndex = -1;
+  let teacherColIndex = -1;
+  let classAvgColIndex = -1;
+  
+  headers.forEach((header, index) => {
+    const headerStr = String(header).toLowerCase();
+    if (headerStr.includes('matière') || headerStr.includes('discipline')) {
+      subjectColIndex = index;
+    }
+    if (headerStr.includes('moy') || headerStr.includes('note')) {
+      gradeColIndex = index;
+    }
+    if (headerStr.includes('app') || headerStr.includes('comment')) {
+      commentColIndex = index;
+    }
+    if (headerStr.includes('prof') || headerStr.includes('enseig')) {
+      teacherColIndex = index;
+    }
+    if (headerStr.includes('classe') && headerStr.includes('moy')) {
+      classAvgColIndex = index;
     }
   });
   
-  // Add the last row
-  if (currentRow.length > 0) {
-    currentRow.sort((a, b) => a.transform[4] - b.transform[4]);
-    rows.push(currentRow);
-  }
+  // Extract subject data
+  const grades: {[subject: string]: number | null} = {};
+  const comments: {[subject: string]: string} = {};
+  const teachers: {[subject: string]: string} = {};
+  const classAvg: {[subject: string]: number | null} = {};
+  let studentAverage = 0;
+  let gradeCount = 0;
   
-  return rows;
-}
-
-/**
- * Find the header row index that contains subject column headers
- */
-function findHeaderRowIndex(rows: any[][]): number {
-  for (let i = 0; i < rows.length; i++) {
-    const rowText = rows[i].map(item => item.str.toLowerCase()).join(' ');
+  for (let i = tableStartIndex + 1; i < data.length; i++) {
+    const row = data[i] || [];
+    if (row.length <= 1 || !row[subjectColIndex]) continue;
     
-    // Look for patterns that indicate this is a header row
-    if (rowText.includes('matière') || 
-        rowText.includes('subject') || 
-        (rowText.includes('moyenne') && rowText.includes('élève')) ||
-        (rowText.includes('note') && rowText.includes('appréciation')) ||
-        (rowText.includes('classe') && rowText.includes('élève'))) {
-      return i;
+    const subject = String(row[subjectColIndex]).trim();
+    if (!subject || subject.toLowerCase() === 'moyenne générale') {
+      // Check if this is the final average row
+      if (row.some(cell => String(cell).toLowerCase().includes('moyenne') && 
+                           String(cell).toLowerCase().includes('générale'))) {
+        const avgCell = row[gradeColIndex];
+        if (avgCell && !isNaN(Number(avgCell))) {
+          studentAverage = Number(avgCell);
+        }
+      }
+      continue;
+    }
+    
+    subjects.push(subject);
+    
+    // Extract grade
+    if (gradeColIndex >= 0 && row[gradeColIndex] !== undefined) {
+      const grade = parseFloat(String(row[gradeColIndex]).replace(',', '.'));
+      if (!isNaN(grade)) {
+        grades[subject] = grade;
+        gradeCount++;
+        studentAverage += grade;
+      } else {
+        grades[subject] = null;
+      }
+    } else {
+      grades[subject] = null;
+    }
+    
+    // Extract comment
+    if (commentColIndex >= 0 && row[commentColIndex]) {
+      comments[subject] = String(row[commentColIndex]).trim();
+    }
+    
+    // Extract teacher
+    if (teacherColIndex >= 0 && row[teacherColIndex]) {
+      teachers[subject] = String(row[teacherColIndex]).trim();
+    }
+    
+    // Extract class average
+    if (classAvgColIndex >= 0 && row[classAvgColIndex] !== undefined) {
+      const avg = parseFloat(String(row[classAvgColIndex]).replace(',', '.'));
+      classAvg[subject] = !isNaN(avg) ? avg : null;
     }
   }
   
-  return -1;
-}
-
-/**
- * Identify the column structure from the header row
- */
-function identifyColumnStructure(headerRow: any[]): {
-  subjectCol: [number, number],
-  studentGradeCol: [number, number],
-  classGradeCol: [number, number],
-  commentCol: [number, number]
-} {
-  const headerTexts = headerRow.map(item => ({
-    text: item.str.toLowerCase(),
-    x: item.transform[4]
-  }));
-  
-  let subjectColStart = 0;
-  let subjectColEnd = 150; // Default values
-  let studentGradeColStart = 150;
-  let studentGradeColEnd = 200;
-  let classGradeColStart = 200;
-  let classGradeColEnd = 250;
-  let commentColStart = 250;
-  let commentColEnd = 1000;
-  
-  // Find subject column
-  const subjectHeader = headerTexts.find(h => 
-    h.text.includes('matière') || 
-    h.text.includes('subject') ||
-    h.text.includes('discipline')
-  );
-  
-  if (subjectHeader) {
-    subjectColStart = subjectHeader.x;
-    // Find next header to determine end of subject column
-    const nextHeader = headerTexts.find(h => h.x > subjectHeader.x);
-    if (nextHeader) {
-      subjectColEnd = nextHeader.x;
-    }
-  }
-  
-  // Find student grade column
-  const studentGradeHeader = headerTexts.find(h => 
-    h.text.includes('élève') || 
-    h.text.includes('note') ||
-    h.text.includes('student')
-  );
-  
-  if (studentGradeHeader) {
-    studentGradeColStart = studentGradeHeader.x;
-    // Find next header to determine end
-    const nextHeader = headerTexts.find(h => h.x > studentGradeHeader.x);
-    if (nextHeader) {
-      studentGradeColEnd = nextHeader.x;
-    }
-  }
-  
-  // Find class grade column
-  const classGradeHeader = headerTexts.find(h => 
-    h.text.includes('classe') || 
-    h.text.includes('class') ||
-    h.text.includes('moy') && !h.text.includes('élève')
-  );
-  
-  if (classGradeHeader) {
-    classGradeColStart = classGradeHeader.x;
-    // Find next header to determine end
-    const nextHeader = headerTexts.find(h => h.x > classGradeHeader.x);
-    if (nextHeader) {
-      classGradeColEnd = nextHeader.x;
-    }
-  }
-  
-  // Find comment column
-  const commentHeader = headerTexts.find(h => 
-    h.text.includes('appréciation') || 
-    h.text.includes('comment') ||
-    h.text.includes('remarque')
-  );
-  
-  if (commentHeader) {
-    commentColStart = commentHeader.x;
-    // Usually last column
-    commentColEnd = 1000;
+  // If we didn't find specific student average but have grades
+  if (studentAverage === 0 && gradeCount > 0) {
+    studentAverage = studentAverage / gradeCount;
   }
   
   return {
-    subjectCol: [subjectColStart, subjectColEnd],
-    studentGradeCol: [studentGradeColStart, studentGradeColEnd],
-    classGradeCol: [classGradeColStart, classGradeColEnd],
-    commentCol: [commentColStart, commentColEnd]
+    students: [{
+      name: studentName || 'Élève non identifié',
+      grades,
+      average: studentAverage > 0 ? studentAverage : undefined,
+      comments,
+      teacherNames: teachers,
+      classAvg
+    }],
+    subjects,
+    termInfo: {
+      term: termName,
+      class: className,
+      schoolName
+    }
   };
 }
 
-/**
- * Extract text from a specific column in a row
- */
-function extractTextFromColumn(row: any[], columnRange: [number, number]): string {
-  const [start, end] = columnRange;
+// Parse standard grade table format
+function parseStandardGradeTable(data: any[][]): ParsedFileData {
+  const headers = data[0] || [];
+  let nameColIndex = -1;
+  const subjectIndices: number[] = [];
+  let classNameRow = '';
+  let termNameRow = '';
   
-  const columnItems = row.filter(item => 
-    item.transform[4] >= start && item.transform[4] < end
-  );
-  
-  return columnItems.map(item => item.str).join(' ').trim();
-}
-
-/**
- * Extract teacher name from row data
- */
-function extractTeacherName(row: any[], subjectText: string): string {
-  // Teacher names often follow a pattern like "M. NAME" or "Mme NAME"
-  const teacherPatterns = [
-    /M\.\s+([A-Z]+)/,
-    /Mme\s+([A-Z]+)/,
-    /M[r]?\s+([A-Z]+)/,
-    /M\s+([A-Z]+)/,
-  ];
-  
-  const rowText = row.map(item => item.str).join(' ');
-  
-  for (const pattern of teacherPatterns) {
-    const match = rowText.match(pattern);
-    if (match && match[1]) {
-      return match[0].trim();
+  // Try to detect "classe" and "trimestre" from the first few rows
+  for (let i = 0; i < Math.min(5, data.length); i++) {
+    const rowStr = data[i]?.join(' ').toLowerCase() || '';
+    if (rowStr.includes('classe')) {
+      classNameRow = rowStr;
+    }
+    if (rowStr.includes('trimestre')) {
+      termNameRow = rowStr;
     }
   }
   
-  return '';
-}
-
-/**
- * Parse a grade from text, handling different formats
- */
-function parseGrade(text: string): number | null {
-  // Clean the text and look for numbers
-  const cleanText = text.trim();
-  
-  if (!cleanText) return null;
-  
-  // Handle various grade formats: 12,5 or 12.5 or 12.5/20
-  const gradeMatch = cleanText.match(/(\d+[.,]\d+)/) || cleanText.match(/^(\d+)$/);
-  
-  if (gradeMatch && gradeMatch[1]) {
-    return parseFloat(gradeMatch[1].replace(',', '.'));
-  }
-  
-  return null;
-}
-
-/**
- * Fallback method to extract subjects and grades from text
- */
-function extractSubjectsAndGradesFromText(
-  text: string, 
-  subjects: string[], 
-  grades: {[subject: string]: number | null},
-  comments: {[subject: string]: string}
-) {
-  // Common subjects in French curriculum
-  const commonSubjects = [
-    'FRANÇAIS', 'MATHEMATIQUES', 'HISTOIRE-GEOGRAPHIE', 'ANGLAIS', 
-    'PHYSIQUE-CHIMIE', 'SVT', 'TECHNOLOGIE', 'EPS', 'ARTS PLASTIQUES',
-    'EDUCATION MUSICALE', 'ESPAGNOL', 'ALLEMAND', 'LATIN'
-  ];
-  
-  // Look for subjects in the text
-  for (const subject of commonSubjects) {
-    // Create a regex that's not case sensitive
-    const regex = new RegExp(subject, 'i');
-    
-    if (regex.test(text)) {
-      // Find the subject in the text
-      const subjectIndex = text.search(regex);
-      if (subjectIndex !== -1) {
-        // Extract the exact subject text from the PDF
-        const exactSubject = text.substring(subjectIndex, subjectIndex + subject.length);
-        subjects.push(exactSubject);
-        
-        // Look for grades near the subject (within the next 50 characters)
-        const nearbyText = text.substring(subjectIndex, subjectIndex + 50);
-        const gradeMatch = nearbyText.match(/(\d+[.,]\d+)/);
-        
-        if (gradeMatch && gradeMatch[1]) {
-          grades[exactSubject] = parseFloat(gradeMatch[1].replace(',', '.'));
-        } else {
-          grades[exactSubject] = null;
-        }
-        
-        // Look for comments (longer text after the grade)
-        const lines = text.substring(subjectIndex).split('\n');
-        if (lines.length > 1) {
-          // Skip the subject line, take the next non-empty line as a comment
-          for (let i = 1; i < lines.length; i++) {
-            if (lines[i].length > 20 && !/^\d+[.,]\d+/.test(lines[i])) {
-              comments[exactSubject] = lines[i].trim();
-              break;
-            }
-          }
-        }
-      }
+  // Find column indices
+  headers.forEach((header, index) => {
+    const headerStr = String(header).toLowerCase();
+    if (headerStr === 'nom' || headerStr === 'élève' || headerStr === 'etudiant' || 
+        headerStr === 'nom de l\'élève' || headerStr.includes('nom')) {
+      nameColIndex = index;
+    } else if (headerStr && !headerStr.includes('moyenne') && 
+              !headerStr.includes('total') && !headerStr.includes('rang')) {
+      // Assume this is a subject
+      subjectIndices.push(index);
     }
-  }
-}
-
-/**
- * Enhanced function to extract tables from text items
- */
-function extractTablesFromTextItems(textItems: any[]): any[] {
-  // Group items by rows
-  const rows = groupTextItemsByRows(textItems);
+  });
   
-  // Identify potential table rows (rows with similar structure)
-  const tableRows: any[][] = [];
-  let potentialTableStartIndex = -1;
+  // Extract subjects
+  const subjects = subjectIndices.map(idx => String(headers[idx]));
   
-  // Find rows that have numbers which could be grades
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const rowText = row.map((item: any) => item.str).join(' ');
-    
-    // Look for rows with numeric grades (numbers with commas or dots)
-    if (/\d+[.,]\d+/.test(rowText)) {
-      // If this is the first potential table row we've found
-      if (potentialTableStartIndex === -1) {
-        // Look back 1-2 rows for a header row
-        potentialTableStartIndex = Math.max(0, i - 2);
-      }
-      
-      tableRows.push(row);
-    } else if (potentialTableStartIndex !== -1 && tableRows.length > 0) {
-      // If we already found some table rows but this row doesn't match,
-      // check if it could be a continuation of a comment
-      const lastRowText = rows[i-1].map((item: any) => item.str).join(' ');
-      
-      // If the last row ended with punctuation, this is probably not a continuation
-      if (/[.!?]$/.test(lastRowText) || /^\d+[.,]\d+/.test(rowText)) {
-        // This row is likely not part of the table anymore
-        break;
-      } else {
-        // This might be a continuation of a comment cell
-        tableRows.push(row);
-      }
-    }
-  }
+  // Process student data rows
+  const students: ParsedFileData['students'] = [];
   
-  // If we found enough rows that might form a table
-  if (tableRows.length >= 3) {
-    // Add the header row(s)
-    const headerRows = rows.slice(potentialTableStartIndex, potentialTableStartIndex + 2);
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
     
-    // Convert to a more structured format
-    const structuredTable = [...headerRows, ...tableRows].map(row => 
-      row.map((item: any) => item.str)
-    );
+    // Skip rows without a name
+    if (nameColIndex >= 0 && !row[nameColIndex]) continue;
     
-    return [structuredTable];
-  }
-  
-  return [];
-}
-
-/**
- * Process extracted table data from PDF
- */
-function processExtractedTables(tables: any[], fullText: string, filename: string): ParsedFileData {
-  try {
-    // Find the table that most likely contains student grades
-    // (typically has numbers that could be grades)
-    const gradeTable = tables.find(table => {
-      // Check if table contains rows with numeric values (possible grades)
-      return table.some((row: string[]) => 
-        row.some(cell => /\d+([.,]\d+)?\/\d+/.test(cell) || /^[0-9]+([.,][0-9]+)?$/.test(cell))
-      );
-    }) || tables[0];
+    const studentName = nameColIndex >= 0 ? String(row[nameColIndex]) : `Élève ${i}`;
+    const grades: {[subject: string]: number | null} = {};
     
-    if (!gradeTable || gradeTable.length < 2) {
-      throw new Error("No usable grade table found in PDF");
-    }
+    // Extract grades for each subject
+    let totalGrade = 0;
+    let gradeCount = 0;
     
-    // Try to identify the header row (typically contains subject names)
-    // Headers often don't have numeric values
-    const headerRow = gradeTable[0];
-    
-    // Extract possible subject names from header
-    const subjectCandidates = headerRow.filter((header: string) => 
-      !(/^\d+([.,]\d+)?$/.test(header)) && 
-      header.length > 1 && 
-      !/^(Nom|Prénom|Élève|Moyenne|Rang)$/i.test(header)
-    );
-    
-    // Map common subject abbreviations to full names for better AI processing
-    const subjects = subjectCandidates.map((subject: string) => {
-      const subjectMap: {[key: string]: string} = {
-        'FR': 'Français',
-        'MATH': 'Mathématiques',
-        'MATHS': 'Mathématiques',
-        'HG': 'Histoire-Géographie',
-        'H-G': 'Histoire-Géographie',
-        'ANG': 'Anglais',
-        'ENG': 'Anglais',
-        'SVT': 'Sciences de la Vie et de la Terre',
-        'PHY': 'Physique-Chimie',
-        'PC': 'Physique-Chimie',
-        'EPS': 'Éducation Physique et Sportive',
-        'TECH': 'Technologie',
-        'TECHNO': 'Technologie',
-        'ESP': 'Espagnol',
-        'ALL': 'Allemand',
-        'MUS': 'Musique',
-        'ARTS': 'Arts Plastiques',
-        'AP': 'Arts Plastiques',
-      };
+    subjectIndices.forEach((subjectIdx, idx) => {
+      const subject = subjects[idx];
+      const gradeValue = row[subjectIdx];
       
-      const normalizedSubject = subject.trim().toUpperCase();
-      return subjectMap[normalizedSubject] || subject;
-    });
-    
-    // Process student data from the remaining rows
-    const students = gradeTable.slice(1).map((row: string[], index: number) => {
-      // Try to extract student name
-      const nameCandidate = row[0] || `Élève ${index + 1}`;
-      const name = nameCandidate.trim();
-      
-      // Extract grades for each subject
-      const grades: {[subject: string]: number | null} = {};
-      subjects.forEach((subject, subjectIndex) => {
-        const gradeText = row[subjectIndex + 1]; // +1 because first column is name
-        if (gradeText) {
-          // Handle various grade formats (12,5 or 12.5 or 12.5/20)
-          const gradeMatch = gradeText.match(/(\d+([.,]\d+)?)/);
-          if (gradeMatch) {
-            grades[subject] = parseFloat(gradeMatch[1].replace(',', '.'));
-          } else {
-            grades[subject] = null;
-          }
+      if (gradeValue !== undefined && gradeValue !== '') {
+        const grade = parseFloat(String(gradeValue).replace(',', '.'));
+        if (!isNaN(grade)) {
+          grades[subject] = grade;
+          totalGrade += grade;
+          gradeCount++;
         } else {
           grades[subject] = null;
         }
-      });
-      
-      // Try to find average if present
-      let average: number | undefined;
-      const avgCandidate = row.find(cell => /moyenne|moy|avg/i.test(cell)) || 
-                          row[row.length - 1]; // Often the last column
-      
-      if (avgCandidate) {
-        const avgMatch = avgCandidate.match(/(\d+([.,]\d+)?)/);
-        if (avgMatch) {
-          average = parseFloat(avgMatch[1].replace(',', '.'));
-        }
-      }
-      
-      // If no average was found, calculate it from grades
-      if (!average) {
-        const validGrades = Object.values(grades).filter(g => g !== null) as number[];
-        if (validGrades.length > 0) {
-          average = validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length;
-        }
-      }
-      
-      // Extract comments if present in the text
-      const comments: {[subject: string]: string} = {};
-      
-      // Look for comments sections that might mention the student name
-      const studentNameParts = name.split(/\s+/);
-      const lastNameFragment = studentNameParts[studentNameParts.length - 1].toLowerCase();
-      
-      subjects.forEach(subject => {
-        // Look for patterns like "Français: [comment about student]" or "[Subject] - [Student Name]: [comment]"
-        const commentRegexes = [
-          new RegExp(`${subject}\\s*[:;-]\\s*([^.]+${lastNameFragment}[^.]+\\.)`),
-          new RegExp(`${subject}\\s*\\(${name}\\)\\s*[:;-]\\s*([^.]+\\.)`),
-          new RegExp(`${name}\\s*-\\s*${subject}\\s*[:;-]\\s*([^.]+\\.)`),
-        ];
-        
-        for (const regex of commentRegexes) {
-          const match = fullText.match(regex);
-          if (match && match[1]) {
-            comments[subject] = match[1].trim();
-            break;
-          }
-        }
-      });
-      
-      return { name, grades, average, comments };
-    });
-    
-    // Extract term information from text
-    const termInfo = {
-      term: extractTermFromText(fullText, filename),
-      class: extractClassFromText(fullText, filename),
-      year: extractYearFromText(fullText),
-    };
-    
-    return {
-      students,
-      subjects,
-      termInfo
-    };
-  } catch (error) {
-    console.error("Error processing PDF tables:", error);
-    return createFallbackData(filename);
-  }
-}
-
-/**
- * Extract academic year from text
- */
-function extractYearFromText(text: string): string {
-  // Look for academic year patterns like "2023-2024" or "2023/2024"
-  const yearRegex = /20\d{2}[\s-/]20\d{2}/;
-  const match = text.match(yearRegex);
-  
-  if (match) {
-    return match[0];
-  }
-  
-  // Look for just a year
-  const singleYearRegex = /20\d{2}/;
-  const singleYearMatch = text.match(singleYearRegex);
-  
-  if (singleYearMatch) {
-    const year = parseInt(singleYearMatch[0]);
-    return `${year}-${year + 1}`;
-  }
-  
-  // Default to current academic year
-  const currentYear = new Date().getFullYear();
-  return `${currentYear}-${currentYear + 1}`;
-}
-
-/**
- * Creates fallback data when PDF parsing fails
- */
-function createFallbackData(filename: string): ParsedFileData {
-  console.log("Using fallback data for PDF:", filename);
-  
-  // Extract potential term info from filename
-  let term = "Trimestre 1";
-  if (filename.toLowerCase().includes('trim2') || filename.toLowerCase().includes('t2')) {
-    term = "Trimestre 2";
-  } else if (filename.toLowerCase().includes('trim3') || filename.toLowerCase().includes('t3')) {
-    term = "Trimestre 3";
-  }
-  
-  // Create mock subjects
-  const subjects = [
-    'Français', 'Mathématiques', 'Histoire-Géographie', 'Anglais', 
-    'SVT', 'Physique-Chimie', 'EPS'
-  ];
-  
-  // Generate mock student data
-  const students = Array.from({ length: 25 }, (_, i) => {
-    const studentName = `Élève ${i + 1}`;
-    const grades: {[subject: string]: number | null} = {};
-    const comments: {[subject: string]: string} = {};
-    
-    subjects.forEach(subject => {
-      // Generate random grades between 8 and 18
-      grades[subject] = Math.floor(Math.random() * 10) + 8;
-      
-      // Generate generic comments
-      if (Math.random() > 0.7) {
-        comments[subject] = "Bon travail, continue ainsi.";
+      } else {
+        grades[subject] = null;
       }
     });
     
     // Calculate average
-    const validGrades = Object.values(grades).filter(g => g !== null) as number[];
-    const average = validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length;
+    const average = gradeCount > 0 ? totalGrade / gradeCount : undefined;
     
-    return { name: studentName, grades, average, comments };
-  });
+    students.push({
+      name: studentName,
+      grades,
+      average
+    });
+  }
+  
+  // Extract term info
+  let termName = '';
+  let className = '';
+  
+  if (termNameRow) {
+    const trimMatch = termNameRow.match(/trimestre\s*(\d)/i);
+    if (trimMatch) {
+      termName = `Trimestre ${trimMatch[1]}`;
+    }
+  }
+  
+  if (classNameRow) {
+    const classMatch = classNameRow.match(/classe\s*:?\s*(.+?)($|\s+\d)/i);
+    if (classMatch) {
+      className = classMatch[1].trim();
+    }
+  }
   
   return {
     students,
     subjects,
     termInfo: {
-      term,
-      class: extractClassFromFilename(filename)
+      term: termName,
+      class: className
     }
   };
 }
 
-/**
- * Extract class information from filename
- */
-function extractClassFromFilename(filename: string): string {
-  // Try to find class in filename using patterns like "6A", "5emeB", etc.
-  const classPatterns = [
-    /(\d+[èeé]me\s*[A-Za-z])/i,  // e.g., "6ème A"
-    /classe\s*(\d+[A-Za-z])/i,   // e.g., "classe 6A"
-    /(\d+[A-Za-z])/i             // e.g., "6A"
+// Parse CSV files
+export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      complete: (results) => {
+        try {
+          const csvData = results.data as any[][];
+          console.log('Parsed CSV data:', csvData);
+          
+          // Process the CSV data similar to Excel data
+          const parsedData = processExcelData(csvData);
+          resolve(parsedData);
+        } catch (error) {
+          console.error('Error processing CSV data:', error);
+          reject(new Error(`Erreur lors de l'analyse du fichier CSV: ${error}`));
+        }
+      },
+      error: (error) => {
+        console.error('Error parsing CSV file:', error);
+        reject(new Error(`Erreur lors de l'analyse du fichier CSV: ${error}`));
+      }
+    });
+  });
+};
+
+// Setup PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+
+// Parse PDF files
+export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    
+    console.log(`PDF loaded with ${pdf.numPages} pages`);
+    
+    // Extract text from all pages
+    const textContent: string[] = [];
+    const textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}> = [];
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      
+      content.items.forEach((item: any) => {
+        const itemText = item.str;
+        textContent.push(itemText);
+        
+        // Also store position information for table detection
+        if (item.transform) {
+          // PDF.js returns transforms as a 6-element array where [0, 1, 2, 3] is the 
+          // transformation matrix and [4, 5] is the translation vector
+          const x = item.transform[4];
+          const y = item.transform[5];
+          const height = item.height || 0;
+          const width = item.width || 0;
+          
+          textPositions.push({
+            text: itemText,
+            x,
+            y,
+            height,
+            width,
+            page: i
+          });
+        }
+      });
+    }
+    
+    // Log extracted text for debugging
+    console.log('Extracted PDF text content', textContent.join(' ').substring(0, 500) + '...');
+    
+    // Try to detect if this is a French student bulletin
+    if (isFrenchBulletin(textContent)) {
+      console.log('Detected French student bulletin format');
+      return parseFrenchBulletinPDF(textContent, textPositions);
+    }
+    
+    // If not a recognized format, try general PDF grade extraction
+    return extractGradesFromPDF(textContent, textPositions);
+    
+  } catch (error) {
+    console.error('Error parsing PDF file:', error);
+    throw new Error(`Erreur lors de l'analyse du fichier PDF: ${error}`);
+  }
+};
+
+// Check if the PDF appears to be a French bulletin
+function isFrenchBulletin(textContent: string[]): boolean {
+  const fullText = textContent.join(' ').toLowerCase();
+  
+  return (
+    fullText.includes('bulletin') &&
+    (fullText.includes('trimestre') || fullText.includes('semestre')) &&
+    (fullText.includes('élève') || fullText.includes('appréciation') || 
+     fullText.includes('matière') || fullText.includes('moyenne'))
+  );
+}
+
+// Parse French bulletin PDF format
+function parseFrenchBulletinPDF(
+  textContent: string[], 
+  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
+): ParsedFileData {
+  // Join all text for easier searching
+  const fullText = textContent.join(' ');
+  
+  // Extract student name
+  let studentName = 'Élève non identifié';
+  const nameMatches = [
+    /élève\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\s+\d|\s*$)/i,
+    /nom\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\s+prénom|\s*$)/i,
+    /([A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)\s*-\s*Bulletin/i
   ];
   
-  for (const pattern of classPatterns) {
-    const match = filename.match(pattern);
+  for (const pattern of nameMatches) {
+    const match = fullText.match(pattern);
     if (match && match[1]) {
-      return match[1];
+      studentName = match[1].trim();
+      console.log('Found student name:', studentName);
+      break;
     }
   }
   
-  return "Unknown";
+  // Extract school name
+  let schoolName = '';
+  const schoolMatches = fullText.match(/((Collège|Lycée|École)\s+[A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\d|\s*$)/i);
+  if (schoolMatches && schoolMatches[1]) {
+    schoolName = schoolMatches[1].trim();
+  }
+  
+  // Extract term info
+  let termName = '';
+  const termMatches = fullText.match(/(1er|2e|3e|premier|deuxième|troisième|1|2|3)\s*(trimestre|semestre)/i);
+  if (termMatches) {
+    const termNumber = termMatches[1];
+    const termType = termMatches[2].toLowerCase();
+    
+    // Convert to standardized format
+    let num = termNumber;
+    if (termNumber === 'premier') num = '1';
+    if (termNumber === 'deuxième') num = '2';
+    if (termNumber === 'troisième') num = '3';
+    if (termNumber === '1er') num = '1';
+    
+    termName = `${termType.charAt(0).toUpperCase() + termType.slice(1)} ${num}`;
+  }
+  
+  // Extract class info
+  let className = '';
+  const classMatches = [
+    /classe\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9\s-]+?)(\s|$)/i,
+    /(\d+[A-Za-zÀ-ÖØ-öø-ÿ]{1,2}\s*\d*)/i
+  ];
+  
+  for (const pattern of classMatches) {
+    const match = fullText.match(pattern);
+    if (match && match[1]) {
+      className = match[1].trim();
+      break;
+    }
+  }
+  
+  // Try to extract subject table data using positions
+  const tableData = extractTableData(textPositions);
+  if (tableData.subjects.length > 0) {
+    console.log('Successfully extracted table data using positions');
+    
+    return {
+      students: [{
+        name: studentName,
+        grades: tableData.grades,
+        average: tableData.average,
+        comments: tableData.comments,
+        teacherNames: tableData.teachers,
+        classAvg: tableData.classAvgs
+      }],
+      subjects: tableData.subjects,
+      termInfo: {
+        term: termName,
+        class: className,
+        schoolName
+      }
+    };
+  }
+  
+  // Fallback to regex-based extraction
+  console.log('Using fallback regex-based extraction');
+  const subjects: string[] = [];
+  const grades: {[subject: string]: number | null} = {};
+  const comments: {[subject: string]: string} = {};
+  const teachers: {[subject: string]: string} = {};
+  const classAvgs: {[subject: string]: number | null} = {};
+  
+  // Common French subjects
+  const commonSubjects = [
+    'Français', 'Mathématiques', 'Histoire', 'Géographie', 'Histoire-Géographie',
+    'Anglais', 'Espagnol', 'Allemand', 'SVT', 'Physique', 'Chimie', 'Physique-Chimie',
+    'EPS', 'Musique', 'Arts Plastiques', 'Technologie', 'Latin', 'Grec'
+  ];
+  
+  // Try to locate subjects and their grades
+  commonSubjects.forEach(subject => {
+    // Look for subject followed by a number (grade)
+    const subjectPattern = new RegExp(`${subject}\\s*:?\\s*(\\d+[,.]?\\d*)`, 'i');
+    const match = fullText.match(subjectPattern);
+    
+    if (match && match[1]) {
+      subjects.push(subject);
+      const grade = parseFloat(match[1].replace(',', '.'));
+      grades[subject] = !isNaN(grade) ? grade : null;
+      
+      // Try to find associated comment
+      const commentPattern = new RegExp(`${subject}.*?appréciation\\s*:?\\s*([^.]+)`, 'i');
+      const commentMatch = fullText.match(commentPattern);
+      if (commentMatch && commentMatch[1]) {
+        comments[subject] = commentMatch[1].trim();
+      }
+      
+      // Try to find associated teacher
+      const teacherPattern = new RegExp(`${subject}.*?professeur\\s*:?\\s*([A-Za-zÀ-ÖØ-öø-ÿ\\s.]+?)\\s*\\d`, 'i');
+      const teacherMatch = fullText.match(teacherPattern);
+      if (teacherMatch && teacherMatch[1]) {
+        teachers[subject] = teacherMatch[1].trim();
+      }
+      
+      // Try to find class average
+      const avgPattern = new RegExp(`${subject}.*?moyenne de la classe\\s*:?\\s*(\\d+[,.]?\\d*)`, 'i');
+      const avgMatch = fullText.match(avgPattern);
+      if (avgMatch && avgMatch[1]) {
+        const avg = parseFloat(avgMatch[1].replace(',', '.'));
+        classAvgs[subject] = !isNaN(avg) ? avg : null;
+      }
+    }
+  });
+  
+  // Look for general average
+  let average;
+  const avgMatches = fullText.match(/moyenne générale\s*:?\s*(\d+[,.]?\d*)/i);
+  if (avgMatches && avgMatches[1]) {
+    average = parseFloat(avgMatches[1].replace(',', '.'));
+    if (isNaN(average)) average = undefined;
+  }
+  
+  return {
+    students: [{
+      name: studentName,
+      grades,
+      average,
+      comments,
+      teacherNames: teachers,
+      classAvg: classAvgs
+    }],
+    subjects,
+    termInfo: {
+      term: termName,
+      class: className,
+      schoolName
+    }
+  };
 }
 
-/**
- * Process tabular data from Excel/CSV
- */
-function processTabularData(data: any[]): ParsedFileData {
-  // Extract subject names from the headers
-  const headers = Object.keys(data[0] || {});
+// Extract table data using text positions
+function extractTableData(
+  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
+) {
+  const subjects: string[] = [];
+  const grades: {[subject: string]: number | null} = {};
+  const comments: {[subject: string]: string} = {};
+  const teachers: {[subject: string]: string} = {};
+  const classAvgs: {[subject: string]: number | null} = {};
+  let average = undefined;
   
-  // Filter out non-subject headers
-  const subjectHeaders = headers.filter(header => 
-    !['Nom', 'Prénom', 'Élève', 'Classe', 'Moyenne', 'Rang', 'Commentaire'].includes(header) && 
-    !header.toLowerCase().includes('trimestre') &&
-    !header.toLowerCase().includes('term')
-  );
+  // Sort positions by y-coordinate (top to bottom)
+  textPositions.sort((a, b) => {
+    // First sort by page
+    if (a.page !== b.page) return a.page - b.page;
+    // Then by y-coordinate on the same page
+    return b.y - a.y; // PDF coordinates have y=0 at the bottom
+  });
   
-  // Extract student data
-  const students = data.map(row => {
-    // Determine student name from available fields
-    const name = row['Nom'] && row['Prénom'] 
-      ? `${row['Prénom']} ${row['Nom']}` 
-      : row['Élève'] || row['Nom'] || 'Unknown';
+  // Group text positions by row (lines that are close in y-coordinate)
+  const rows: Array<Array<{text: string, x: number, y: number}>> = [];
+  let currentRow: Array<{text: string, x: number, y: number}> = [];
+  let currentY = -1;
+  const yTolerance = 5; // Points of tolerance for considering lines in the same row
+  
+  textPositions.forEach(pos => {
+    if (currentY === -1 || Math.abs(pos.y - currentY) <= yTolerance) {
+      currentRow.push(pos);
+      currentY = pos.y;
+    } else {
+      if (currentRow.length > 0) {
+        // Sort the row by x-coordinate (left to right)
+        currentRow.sort((a, b) => a.x - b.x);
+        rows.push(currentRow);
+      }
+      currentRow = [pos];
+      currentY = pos.y;
+    }
+  });
+  
+  // Add the last row if it has items
+  if (currentRow.length > 0) {
+    currentRow.sort((a, b) => a.x - b.x);
+    rows.push(currentRow);
+  }
+  
+  // Try to identify the header row with column names
+  let headerRow = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const rowText = rows[i].map(item => item.text.toLowerCase()).join(' ');
+    if ((rowText.includes('matière') || rowText.includes('discipline')) && 
+        (rowText.includes('moyenne') || rowText.includes('note'))) {
+      headerRow = i;
+      break;
+    }
+  }
+  
+  if (headerRow >= 0) {
+    // Identify column positions based on the header
+    const header = rows[headerRow];
+    let subjectColStart = -1;
+    let gradeColStart = -1;
+    let commentColStart = -1;
+    let teacherColStart = -1;
+    let classAvgColStart = -1;
     
-    // Extract grades for each subject
-    const grades: {[subject: string]: number | null} = {};
-    subjectHeaders.forEach(subject => {
-      const grade = parseFloat(row[subject]);
-      grades[subject] = isNaN(grade) ? null : grade;
-    });
-    
-    // Extract comments if available
-    const comments: {[subject: string]: string} = {};
-    subjectHeaders.forEach(subject => {
-      const commentKey = `${subject} (Appréciation)`;
-      if (row[commentKey]) {
-        comments[subject] = row[commentKey];
+    header.forEach((item, idx) => {
+      const text = item.text.toLowerCase();
+      if (text.includes('matière') || text.includes('discipline')) {
+        subjectColStart = item.x;
+      } 
+      else if (text.includes('moyenne') && !text.includes('classe')) {
+        gradeColStart = item.x;
+      } 
+      else if (text.includes('appréciation') || text.includes('observation')) {
+        commentColStart = item.x;
+      } 
+      else if (text.includes('prof') || text.includes('enseig')) {
+        teacherColStart = item.x;
+      } 
+      else if ((text.includes('moyenne') && text.includes('classe')) || 
+              text.includes('moy cls')) {
+        classAvgColStart = item.x;
       }
     });
     
-    // Calculate average if not provided
-    let average = parseFloat(row['Moyenne']);
-    if (isNaN(average)) {
-      const validGrades = Object.values(grades).filter(g => g !== null) as number[];
-      average = validGrades.length 
-        ? validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length 
-        : 0;
+    // Process data rows
+    for (let i = headerRow + 1; i < rows.length; i++) {
+      const row = rows[i];
+      
+      // Skip rows that appear to be headers, separators or too short
+      if (row.length < 2) continue;
+      const rowText = row.map(item => item.text.toLowerCase()).join(' ');
+      if (rowText.includes('matière') || 
+          rowText.includes('moyenne générale') ||
+          rowText === '') continue;
+      
+      // Extract subject name
+      let subject = '';
+      let grade = null;
+      let comment = '';
+      let teacher = '';
+      let classAvg = null;
+      
+      if (subjectColStart >= 0) {
+        const subjectItems = row.filter(item => 
+          Math.abs(item.x - subjectColStart) < 50 || item.x < subjectColStart + 150
+        );
+        subject = subjectItems.map(item => item.text.trim()).join(' ');
+      }
+      
+      // Skip rows without a subject
+      if (!subject || subject.toLowerCase().includes('moyenne générale')) {
+        // Check if this row contains the student's general average
+        if (rowText.includes('moyenne générale')) {
+          const avgText = row.find(item => {
+            const text = item.text.trim();
+            return /^\d+[.,]?\d*$/.test(text) && !isNaN(parseFloat(text.replace(',', '.')));
+          });
+          
+          if (avgText) {
+            average = parseFloat(avgText.text.replace(',', '.'));
+          }
+        }
+        continue;
+      }
+      
+      // Clean up subject name
+      subject = subject.replace(/^\d+\s*/, '').trim(); // Remove leading numbers
+      subjects.push(subject);
+      
+      // Extract grade
+      if (gradeColStart >= 0) {
+        const gradeItems = row.filter(item => 
+          Math.abs(item.x - gradeColStart) < 30
+        );
+        
+        if (gradeItems.length > 0) {
+          const gradeText = gradeItems[0].text.trim().replace(',', '.');
+          const parsedGrade = parseFloat(gradeText);
+          grade = !isNaN(parsedGrade) ? parsedGrade : null;
+        }
+      }
+      
+      // Extract comment
+      if (commentColStart >= 0) {
+        const commentItems = row.filter(item => 
+          item.x >= commentColStart && (teacherColStart < 0 || item.x < teacherColStart)
+        );
+        
+        comment = commentItems.map(item => item.text.trim()).join(' ');
+      }
+      
+      // Extract teacher
+      if (teacherColStart >= 0) {
+        const teacherItems = row.filter(item => 
+          item.x >= teacherColStart && (classAvgColStart < 0 || item.x < classAvgColStart)
+        );
+        
+        teacher = teacherItems.map(item => item.text.trim()).join(' ');
+      }
+      
+      // Extract class average
+      if (classAvgColStart >= 0) {
+        const classAvgItems = row.filter(item => 
+          Math.abs(item.x - classAvgColStart) < 30
+        );
+        
+        if (classAvgItems.length > 0) {
+          const avgText = classAvgItems[0].text.trim().replace(',', '.');
+          const parsedAvg = parseFloat(avgText);
+          classAvg = !isNaN(parsedAvg) ? parsedAvg : null;
+        }
+      }
+      
+      // Store extracted data
+      grades[subject] = grade;
+      if (comment) comments[subject] = comment;
+      if (teacher) teachers[subject] = teacher;
+      if (classAvg !== null) classAvgs[subject] = classAvg;
+    }
+  }
+  
+  return {
+    subjects,
+    grades,
+    comments,
+    teachers,
+    classAvgs,
+    average
+  };
+}
+
+// General PDF grade extraction
+function extractGradesFromPDF(
+  textContent: string[], 
+  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
+): ParsedFileData {
+  const fullText = textContent.join(' ');
+  
+  // Try to determine if this is a single student PDF or a class PDF
+  const isSingleStudent = /élève|étudiant|bulletin/i.test(fullText) && 
+                         !/liste|tableau|classe entière/i.test(fullText);
+  
+  if (isSingleStudent) {
+    // For single student reports
+    return extractSingleStudentData(textContent, textPositions);
+  } else {
+    // For class-wide reports
+    return extractClassData(textContent, textPositions);
+  }
+}
+
+// Extract data for a single student
+function extractSingleStudentData(
+  textContent: string[], 
+  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
+): ParsedFileData {
+  const fullText = textContent.join(' ');
+  
+  // Extract student name
+  let studentName = '';
+  const nameMatches = fullText.match(/nom\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\s|$)/i);
+  if (nameMatches && nameMatches[1]) {
+    studentName = nameMatches[1].trim();
+  } else {
+    studentName = 'Élève non identifié';
+  }
+  
+  // Try to extract subjects and grades using regex patterns
+  const subjects: string[] = [];
+  const grades: {[subject: string]: number | null} = {};
+  let average = undefined;
+  
+  // Common patterns for subjects and grades in French reports
+  const subjectGradePattern = /([A-Za-zÀ-ÖØ-öø-ÿ\s-]{3,})\s*:?\s*(\d+[,.]?\d*)/g;
+  let match;
+  
+  while ((match = subjectGradePattern.exec(fullText)) !== null) {
+    const subject = match[1].trim();
+    const grade = parseFloat(match[2].replace(',', '.'));
+    
+    // Only add if it seems like a valid subject (not just a random number)
+    if (subject.length > 3 && !subject.match(/^\d/) && !isNaN(grade)) {
+      subjects.push(subject);
+      grades[subject] = grade;
+    }
+  }
+  
+  // Look for average
+  const avgMatch = fullText.match(/moyenne\s*:?\s*(\d+[,.]?\d*)/i);
+  if (avgMatch && avgMatch[1]) {
+    average = parseFloat(avgMatch[1].replace(',', '.'));
+    if (isNaN(average)) average = undefined;
+  }
+  
+  // If no subjects were found, create fallback data
+  if (subjects.length === 0) {
+    console.warn('No subjects found in PDF, creating fallback data');
+    return createFallbackData(studentName);
+  }
+  
+  return {
+    students: [{
+      name: studentName,
+      grades,
+      average
+    }],
+    subjects,
+    termInfo: {
+      term: 'Inconnu',
+      class: 'Inconnu'
+    }
+  };
+}
+
+// Extract data for a class
+function extractClassData(
+  textContent: string[], 
+  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
+): ParsedFileData {
+  // Try to identify table structure in the PDF
+  // This is a simplified approach - real implementation would be more robust
+  const rows = identifyTableRows(textPositions);
+  
+  if (rows.length === 0) {
+    console.warn('No table structure found in PDF, creating fallback data');
+    return createFallbackData('Classe entière');
+  }
+  
+  // Identify header row
+  let headerRow = rows[0];
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    const rowText = rows[i].map(cell => cell.text.toLowerCase()).join(' ');
+    if (rowText.includes('nom') || rowText.includes('élève') || rowText.includes('étudiant')) {
+      headerRow = rows[i];
+      break;
+    }
+  }
+  
+  // Try to identify columns
+  const nameColIndex = headerRow.findIndex(cell => 
+    cell.text.toLowerCase().includes('nom') || 
+    cell.text.toLowerCase().includes('élève')
+  );
+  
+  // If we can't identify the name column, fall back
+  if (nameColIndex === -1) {
+    console.warn('Could not identify name column in table, creating fallback data');
+    return createFallbackData('Classe entière');
+  }
+  
+  // Extract subjects from header
+  const subjects: string[] = [];
+  for (let i = 0; i < headerRow.length; i++) {
+    if (i !== nameColIndex && 
+       !headerRow[i].text.toLowerCase().includes('moyenne') &&
+       !headerRow[i].text.toLowerCase().includes('total')) {
+      subjects.push(headerRow[i].text.trim());
+    }
+  }
+  
+  // Process data rows
+  const students: ParsedFileData['students'] = [];
+  
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.length <= nameColIndex) continue;
+    
+    const name = row[nameColIndex].text.trim();
+    if (!name) continue;
+    
+    const grades: {[subject: string]: number | null} = {};
+    let totalGrade = 0;
+    let gradeCount = 0;
+    
+    // Extract grades
+    for (let j = 0; j < Math.min(subjects.length, row.length); j++) {
+      const colIndex = headerRow.indexOf(headerRow.find(cell => cell.text.trim() === subjects[j]) || {text: ''});
+      if (colIndex === -1 || colIndex >= row.length) continue;
+      
+      const gradeText = row[colIndex].text.trim().replace(',', '.');
+      const grade = parseFloat(gradeText);
+      
+      if (!isNaN(grade)) {
+        grades[subjects[j]] = grade;
+        totalGrade += grade;
+        gradeCount++;
+      } else {
+        grades[subjects[j]] = null;
+      }
     }
     
-    return { name, grades, average, comments };
-  });
-  
-  // Extract term information from filename or data
-  const termInfo = {
-    term: determineTermFromData(data) || "Unknown",
-    class: determineClassFromData(data) || "Unknown"
-  };
+    // Calculate average
+    const average = gradeCount > 0 ? totalGrade / gradeCount : undefined;
+    
+    students.push({
+      name,
+      grades,
+      average
+    });
+  }
   
   return {
     students,
-    subjects: subjectHeaders,
-    termInfo
+    subjects,
+    termInfo: {
+      term: 'Inconnu',
+      class: 'Inconnu'
+    }
   };
 }
 
-/**
- * Process extracted text from PDF
- */
-function processPdfText(text: string, filename: string): ParsedFileData {
-  // Enhanced to extract more information from text-based PDF files
-  try {
-    const lines = text.split('\n').filter(line => line.trim() !== '');
+// Create a simple table structure from text positions
+function identifyTableRows(
+  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
+): Array<Array<{text: string, x: number, y: number}>> {
+  // Group positions by y-coordinate (rows)
+  const yGroups: Record<number, Array<{text: string, x: number, y: number}>> = {};
+  const yTolerance = 5; // Tolerance for considering positions to be on the same line
+  
+  textPositions.forEach(pos => {
+    // Round y-coordinate to group nearby positions
+    const roundedY = Math.round(pos.y / yTolerance) * yTolerance;
     
-    // Try to extract term information
-    const termInfo = {
-      term: extractTermFromText(text, filename),
-      class: extractClassFromText(text, filename),
-      year: extractYearFromText(text)
-    };
-    
-    // Try to extract subject names with improved pattern matching
-    const subjects = extractSubjectsFromText(text);
-    
-    // Try to extract student data using multiple regex patterns
-    const students = extractStudentsFromText(text, subjects);
-    
-    // If no students were found, try alternative extraction methods
-    if (students.length === 0) {
-      // Try to extract student names
-      const namePatterns = [
-        /\b([A-Z][a-zéèêëàâäôöûüç]+ [A-Z][a-zéèêëàâäôöûüç]+)\b/g,  // e.g., "Dupont Jean"
-        /\b([A-Z][A-Z]+) ([A-Z][a-zéèêëàâäôöûüç]+)\b/g,  // e.g., "DUPONT Jean"
-        /\b([A-Z][a-zéèêëàâäôöûüç]+)-([A-Z][a-zéèêëàâäôöûüç]+) ([A-Z][a-zéèêëàâäôöûüç]+)\b/g,  // e.g., "Dupont-Martin Jean"
-      ];
-      
-      const names = new Set<string>();
-      for (const pattern of namePatterns) {
-        const matches = text.matchAll(pattern);
-        for (const match of matches) {
-          names.add(match[0].trim());
-        }
-      }
-      
-      if (names.size > 0) {
-        return {
-          students: Array.from(names).map(name => ({
-            name,
-            grades: subjects.reduce((acc, subject) => {
-              acc[subject] = null;
-              return acc;
-            }, {} as {[subject: string]: number | null}),
-            average: extractAverageForStudent(text, name),
-            comments: extractCommentsForStudent(text, name, subjects)
-          })),
-          subjects,
-          termInfo
-        };
-      }
-      
-      throw new Error("No student data found in PDF");
+    if (!yGroups[roundedY]) {
+      yGroups[roundedY] = [];
     }
     
-    return {
-      students,
-      subjects,
-      termInfo
-    };
-  } catch (error) {
-    console.error("Error in processPdfText:", error);
-    throw error; // Let the main function handle the fallback
-  }
-}
-
-/**
- * Extract the average grade for a specific student from text
- */
-function extractAverageForStudent(text: string, studentName: string): number | undefined {
-  // Look for patterns like "Name: 12.5" or "Name - Average: 14.3" or "Name (14.5)"
-  const nameParts = studentName.split(/\s+/);
-  
-  // Try different patterns based on parts of the name
-  for (const part of nameParts) {
-    if (part.length < 3) continue; // Skip short name parts
-    
-    const patterns = [
-      new RegExp(`${part}[^\\n]*?\\s+(?:moyenne|average|moy|avg)?\\s*[=:;]\\s*(\\d+[.,]\\d+)`, 'i'),
-      new RegExp(`${part}[^\\n]*?\\s+\\((\\d+[.,]\\d+)\\)`, 'i'),
-      new RegExp(`${part}[^\\n]*?\\s+: (\\d+[.,]\\d+)`, 'i'),
-    ];
-    
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        return parseFloat(match[1].replace(',', '.'));
-      }
-    }
-  }
-  
-  return undefined;
-}
-
-/**
- * Extract comments for a specific student from text
- */
-function extractCommentsForStudent(
-  text: string, 
-  studentName: string, 
-  subjects: string[]
-): {[subject: string]: string} {
-  const comments: {[subject: string]: string} = {};
-  const studentNameLower = studentName.toLowerCase();
-  
-  subjects.forEach(subject => {
-    const subjectLower = subject.toLowerCase();
-    
-    // Look for sections that might contain both the subject name and student name
-    const sectionMatches = text.match(
-      new RegExp(`${subjectLower}[^\\n.]*${studentNameLower}[^\\n.]*(\\.|\\n)`, 'i')
-    );
-    
-    if (sectionMatches) {
-      // Clean up the comment to remove the subject and student name
-      let comment = sectionMatches[0].replace(
-        new RegExp(`${subjectLower}|${studentNameLower}`, 'gi'), 
-        ''
-      ).trim();
-      
-      // Clean up any leading/trailing punctuation
-      comment = comment.replace(/^[;:,-\s]+|[;:,-\s]+$/g, '');
-      
-      if (comment) {
-        comments[subject] = comment;
-      }
-    }
-  });
-  
-  return comments;
-}
-
-/**
- * Helper function to determine term from data
- */
-function determineTermFromData(data: any[]): string {
-  // Look for term indicators in the data
-  for (const row of data) {
-    for (const key in row) {
-      const value = String(row[key]).toLowerCase();
-      if (key.toLowerCase().includes('trimestre') || value.includes('trimestre')) {
-        if (value.includes('1')) return 'Trimestre 1';
-        if (value.includes('2')) return 'Trimestre 2';
-        if (value.includes('3')) return 'Trimestre 3';
-        return 'Trimestre';
-      }
-      if (key.toLowerCase().includes('semestre') || value.includes('semestre')) {
-        if (value.includes('1')) return 'Semestre 1';
-        if (value.includes('2')) return 'Semestre 2';
-        return 'Semestre';
-      }
-    }
-  }
-  return 'Unknown';
-}
-
-/**
- * Helper function to determine class from data
- */
-function determineClassFromData(data: any[]): string {
-  // Look for class indicators in the data
-  for (const row of data) {
-    if (row['Classe']) return row['Classe'];
-    for (const key in row) {
-      if (key.toLowerCase().includes('classe')) {
-        return row[key];
-      }
-    }
-  }
-  return 'Unknown';
-}
-
-/**
- * Extract term information from PDF text
- */
-function extractTermFromText(text: string, filename: string): string {
-  // Enhanced regex for better term detection
-  const termRegexes = [
-    /trimestre\s*(\d)/i,
-    /semestre\s*(\d)/i,
-    /bulletin\s*du\s*(\d)(?:er|ème)?\s*trim/i,
-    /(\d)(?:er|ème)?\s*trimestre/i,
-    /t(\d)/i,
-  ];
-  
-  for (const regex of termRegexes) {
-    const match = text.match(regex);
-    if (match && match[1]) {
-      const term = match[1];
-      return `Trimestre ${term}`;
-    }
-  }
-  
-  // Fall back to filename analysis
-  if (filename.toLowerCase().includes('trim1') || 
-      filename.toLowerCase().includes('t1') ||
-      filename.toLowerCase().includes('tr1')) {
-    return 'Trimestre 1';
-  } else if (filename.toLowerCase().includes('trim2') || 
-             filename.toLowerCase().includes('t2') ||
-             filename.toLowerCase().includes('tr2')) {
-    return 'Trimestre 2';
-  } else if (filename.toLowerCase().includes('trim3') || 
-             filename.toLowerCase().includes('t3') ||
-             filename.toLowerCase().includes('tr3')) {
-    return 'Trimestre 3';
-  }
-  
-  return 'Trimestre 1'; // Default to first trimester
-}
-
-/**
- * Extract class information from PDF text
- */
-function extractClassFromText(text: string, filename: string): string {
-  // Enhanced regex for better class detection
-  const classRegexes = [
-    /classe\s*[:;]\s*([^\n\.,]+)/i,
-    /classe\s*de\s*([^\n\.,]+)/i,
-    /(\d+[èe]me\s*[A-Za-z])/i,
-    /classe\s*(\d+[A-Za-z])/i,
-  ];
-  
-  for (const regex of classRegexes) {
-    const match = text.match(regex);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-  }
-  
-  // Fall back to filename analysis
-  return extractClassFromFilename(filename);
-}
-
-/**
- * Extract subject names from PDF text
- */
-function extractSubjectsFromText(text: string): string[] {
-  // Common subjects in French education with variations
-  const commonSubjects = [
-    { name: 'Français', variations: ['français', 'francais', 'fr', 'lettres'] },
-    { name: 'Mathématiques', variations: ['mathématiques', 'mathematiques', 'maths', 'math'] },
-    { name: 'Histoire-Géographie', variations: ['histoire-géographie', 'histoire géographie', 'histoire-geo', 'histoire geo', 'h-g', 'hg'] },
-    { name: 'Anglais', variations: ['anglais', 'lang1', 'lv1', 'ang'] },
-    { name: 'SVT', variations: ['sciences de la vie et de la terre', 'svt'] },
-    { name: 'Physique-Chimie', variations: ['physique-chimie', 'physique chimie', 'phy-chi', 'pc'] },
-    { name: 'EPS', variations: ['éducation physique et sportive', 'education physique', 'eps', 'sport'] },
-    { name: 'Arts Plastiques', variations: ['arts plastiques', 'arts pla', 'ap'] },
-    { name: 'Musique', variations: ['éducation musicale', 'education musicale', 'musique'] },
-    { name: 'Technologie', variations: ['technologie', 'techno', 'tech'] },
-    { name: 'Espagnol', variations: ['espagnol', 'esp', 'lang2', 'lv2'] },
-    { name: 'Allemand', variations: ['allemand', 'all', 'lang2', 'lv2'] },
-    { name: 'Latin', variations: ['latin', 'lat'] },
-    { name: 'Sciences', variations: ['sciences', 'sci'] },
-  ];
-  
-  // Look for subject names in the text
-  const foundSubjects: string[] = [];
-  
-  commonSubjects.forEach(subject => {
-    const allVariations = [subject.name, ...subject.variations];
-    
-    // Check if any variation appears in the text
-    const found = allVariations.some(variation => {
-      const regex = new RegExp(`\\b${variation}\\b`, 'i');
-      return regex.test(text);
+    yGroups[roundedY].push({
+      text: pos.text,
+      x: pos.x,
+      y: pos.y
     });
-    
-    if (found) {
-      foundSubjects.push(subject.name);
-    }
   });
   
-  // If no subjects found, return a default set
-  return foundSubjects.length > 0 ? foundSubjects : [
+  // Sort groups by y-coordinate (top to bottom)
+  const sortedYs = Object.keys(yGroups).map(Number).sort((a, b) => b - a); // Sort in descending order (PDF coords)
+  
+  // Convert groups to rows
+  const rows: Array<Array<{text: string, x: number, y: number}>> = [];
+  
+  sortedYs.forEach(y => {
+    // Sort positions within row by x-coordinate (left to right)
+    const sortedRow = yGroups[y].sort((a, b) => a.x - b.x);
+    rows.push(sortedRow);
+  });
+  
+  return rows;
+}
+
+// Create fallback data when extraction fails
+function createFallbackData(namePrefix: string): ParsedFileData {
+  console.warn('Creating fallback data for PDF parsing');
+  
+  const fallbackSubjects = [
     'Français', 'Mathématiques', 'Histoire-Géographie', 'Anglais', 
     'SVT', 'Physique-Chimie', 'EPS'
   ];
-}
-
-/**
- * Extract student data from PDF text
- */
-function extractStudentsFromText(text: string, subjects: string[]): Array<{
-  name: string;
-  grades: {[subject: string]: number | null};
-  average?: number;
-  comments?: {[subject: string]: string};
-}> {
-  const students: Array<{
-    name: string;
-    grades: {[subject: string]: number | null};
-    average?: number;
-    comments?: {[subject: string]: string};
-  }> = [];
   
-  // Look for student names and grades using multiple patterns
-  const studentPatterns = [
-    /([A-Z][a-zéèêëàâäôöûüç]+ [A-Z][a-zéèêëàâäôöûüç]+)[\s:]+(?:moyenne|average)?[\s:]*(\d+[.,]\d+)/gi,
-    /([A-Z][A-Z]+ [A-Z][a-zéèêëàâäôöûüç]+)[\s:]+(?:moyenne|average)?[\s:]*(\d+[.,]\d+)/gi,
-    /([A-Z][a-zéèêëàâäôöûüç]+-[A-Z][a-zéèêëàâäôöûüç]+ [A-Z][a-zéèêëàâäôöûüç]+)[\s:]+(?:moyenne|average)?[\s:]*(\d+[.,]\d+)/gi,
-    /élève:?\s*([A-Za-zéèêëàâäôöûüç\s-]+)[\s:]+(?:moyenne|average)?[\s:]*(\d+[.,]\d+)/gi,
-  ];
+  // Create a student with random grades
+  const student = {
+    name: `${namePrefix} (Données simulées)`,
+    grades: {} as {[subject: string]: number},
+    average: 0
+  };
   
-  const processedNames = new Set<string>();
+  let total = 0;
   
-  for (const pattern of studentPatterns) {
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      const name = match[1].trim();
-      
-      // Skip if we already processed this name
-      if (processedNames.has(name)) continue;
-      processedNames.add(name);
-      
-      const average = parseFloat(match[2].replace(',', '.'));
-      
-      // Look for subject grades for this student
-      const grades: {[subject: string]: number | null} = {};
-      subjects.forEach(subject => {
-        grades[subject] = extractGradeForStudentSubject(text, name, subject);
-      });
-      
-      // Look for comments
-      const comments: {[subject: string]: string} = {};
-      subjects.forEach(subject => {
-        const comment = extractCommentForStudentSubject(text, name, subject);
-        if (comment) {
-          comments[subject] = comment;
-        }
-      });
-      
-      students.push({
-        name,
-        grades,
-        average: isNaN(average) ? undefined : average,
-        comments: Object.keys(comments).length > 0 ? comments : undefined
-      });
+  fallbackSubjects.forEach(subject => {
+    // Random grade between 8 and 16
+    const grade = Math.round((8 + Math.random() * 8) * 2) / 2;
+    student.grades[subject] = grade;
+    total += grade;
+  });
+  
+  student.average = Math.round((total / fallbackSubjects.length) * 10) / 10;
+  
+  toast.warning("Les données n'ont pas pu être extraites correctement du PDF. Des données simulées sont affichées.", {
+    duration: 5000
+  });
+  
+  return {
+    students: [student],
+    subjects: fallbackSubjects,
+    termInfo: {
+      term: 'Simulation',
+      class: 'Simulation'
     }
-  }
-  
-  return students;
-}
-
-/**
- * Extract a grade for a specific student and subject
- */
-function extractGradeForStudentSubject(text: string, studentName: string, subject: string): number | null {
-  // Simplify name and subject for matching
-  const simpleName = studentName.toLowerCase().replace(/[^a-z]/g, '');
-  const simpleSubject = subject.toLowerCase().replace(/[^a-z]/g, '');
-  
-  // Look for patterns like "Student Name - Subject: 14.5" or "Subject (Student Name): 14.5"
-  const patterns = [
-    new RegExp(`${studentName}[^\\n]*${subject}[^\\n]*?\\s*[:-]\\s*(\\d+[.,]\\d+)`, 'i'),
-    new RegExp(`${subject}[^\\n]*${studentName}[^\\n]*?\\s*[:-]\\s*(\\d+[.,]\\d+)`, 'i'),
-    new RegExp(`${subject}[^\\n]*?\\s*[:-]\\s*(\\d+[.,]\\d+)[^\\n]*${studentName}`, 'i'),
-  ];
-  
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      return parseFloat(match[1].replace(',', '.'));
-    }
-  }
-  
-  // Try looking for subject and grade near the student name
-  const nearbyText = extractTextAroundPattern(text, studentName, 500);
-  if (nearbyText) {
-    const subjectNearby = new RegExp(`${subject}[^\\n]*?\\s*[:-]\\s*(\\d+[.,]\\d+)`, 'i');
-    const match = nearbyText.match(subjectNearby);
-    if (match && match[1]) {
-      return parseFloat(match[1].replace(',', '.'));
-    }
-  }
-  
-  return null;
-}
-
-/**
- * Extract text around a specific pattern
- */
-function extractTextAroundPattern(text: string, pattern: string, charCount: number): string | null {
-  const index = text.indexOf(pattern);
-  if (index === -1) return null;
-  
-  const start = Math.max(0, index - charCount / 2);
-  const end = Math.min(text.length, index + pattern.length + charCount / 2);
-  
-  return text.substring(start, end);
-}
-
-/**
- * Extract a comment for a specific student and subject
- */
-function extractCommentForStudentSubject(text: string, studentName: string, subject: string): string | null {
-  // Look for patterns like "Student Name - Subject: Comment..." or "Subject (Student Name): Comment..."
-  const patterns = [
-    new RegExp(`${studentName}[^\\n]*${subject}[^\\n]*?\\s*[:-]\\s*([^\\n\\.]+\\.)`, 'i'),
-    new RegExp(`${subject}[^\\n]*${studentName}[^\\n]*?\\s*[:-]\\s*([^\\n\\.]+\\.)`, 'i'),
-    new RegExp(`appréciation[^\\n]*${subject}[^\\n]*${studentName}[^\\n]*?\\s*[:-]\\s*([^\\n\\.]+\\.)`, 'i'),
-  ];
-  
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-  }
-  
-  // Try looking for subject and comment near the student name
-  const nearbyText = extractTextAroundPattern(text, studentName, 1000);
-  if (nearbyText) {
-    const subjectNearby = new RegExp(`${subject}[^\\n]*?\\s*[:-]\\s*([^\\n\\.]+\\.)`, 'i');
-    const match = nearbyText.match(subjectNearby);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-    
-    // Look for sections that might be comments
-    const commentSectionRegex = new RegExp(`(?:appréciation|remarque|commentaire)[^\\n]*?\\s*[:-]\\s*([^\\n\\.]+\\.)`, 'i');
-    const commentMatch = nearbyText.match(commentSectionRegex);
-    if (commentMatch && commentMatch[1]) {
-      return commentMatch[1].trim();
-    }
-  }
-  
-  return null;
+  };
 }

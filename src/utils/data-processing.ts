@@ -84,19 +84,41 @@ function combineIndividualBulletins(results: ParsedFileData[]): ParsedFileData[]
       result.subjects.forEach(subject => allSubjects.add(subject));
     });
     
-    // Determine common term info (use the first bulletin's info as a base)
-    const baseTermInfo = results[0].termInfo || {
+    // Extract the most complete term info from all bulletins
+    let bestTermInfo = {
       term: 'Unknown',
-      class: 'Unknown'
+      class: 'Unknown',
+      schoolName: undefined
     };
+    
+    for (const result of results) {
+      if (result.termInfo) {
+        // Update term info if more complete
+        if (result.termInfo.schoolName && !bestTermInfo.schoolName) {
+          bestTermInfo.schoolName = result.termInfo.schoolName;
+        }
+        
+        if (result.termInfo.term && bestTermInfo.term === 'Unknown') {
+          bestTermInfo.term = result.termInfo.term;
+        }
+        
+        if (result.termInfo.class && bestTermInfo.class === 'Unknown') {
+          bestTermInfo.class = result.termInfo.class;
+        }
+      }
+    }
     
     // Combine all students into a single list
     const allStudents = results.map(result => result.students[0]);
     
+    // Log the combined data
+    console.log(`Combined ${allStudents.length} students with ${allSubjects.size} subjects`);
+    console.log('Sample student names:', allStudents.slice(0, 3).map(s => s.name));
+    
     return [{
       students: allStudents,
       subjects: Array.from(allSubjects),
-      termInfo: baseTermInfo
+      termInfo: bestTermInfo
     }];
   }
   
