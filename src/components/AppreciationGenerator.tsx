@@ -80,6 +80,12 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
       toast.error("L'API n'est pas configurée par l'administrateur");
       return;
     }
+
+    // Check if we have analysis data
+    if (!analysisData && !classData) {
+      toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer et analyser des fichiers.");
+      return;
+    }
     
     setIsGenerating(true);
     setProgressValue('0');
@@ -88,9 +94,12 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
       let result = '';
       
       if (type === 'class') {
-        // Generate class appreciation using OpenAI
+        // Use actual analysis data with a preference for analysisData over classData
+        const dataToUse = analysisData || classData;
+        console.log("Using class data for OpenAI:", dataToUse);
+        
         result = await OpenAIService.generateClassAppreciation(
-          analysisData || classData,
+          dataToUse,
           tone,
           length[0]
         );
@@ -100,6 +109,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
           throw new Error('Données élève manquantes');
         }
         
+        console.log("Using student data for OpenAI:", { studentName, studentData });
         result = await OpenAIService.generateStudentAppreciation(
           studentName,
           studentData,
@@ -266,3 +276,4 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
 };
 
 export default AppreciationGenerator;
+

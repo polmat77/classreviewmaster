@@ -5,7 +5,7 @@ import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
 import { KeyRound, Lightbulb, AlertCircle, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { processGradeFiles } from '@/utils/data-processing';
+import { processGradeFiles, savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
 import { toast } from 'sonner';
 
 const AppreciationGenerale = () => {
@@ -15,17 +15,24 @@ const AppreciationGenerale = () => {
 
   const handleCurrentReportUpload = (files: File[]) => {
     setCurrentClassReportFiles(files);
+    console.log("Files received in AppreciationGenerale:", files);
+    // Automatically trigger analysis when files are uploaded
+    if (files.length > 0) {
+      analyzeFiles(files);
+    }
   };
 
-  const analyzeFiles = async () => {
-    if (currentClassReportFiles.length === 0) {
+  const analyzeFiles = async (filesToAnalyze = currentClassReportFiles) => {
+    if (filesToAnalyze.length === 0) {
       toast.error("Veuillez importer le bulletin de classe actuel");
       return;
     }
 
     setIsAnalyzing(true);
     try {
-      const data = await processGradeFiles([...currentClassReportFiles]);
+      console.log("Starting analysis with files:", filesToAnalyze);
+      const data = await processGradeFiles([...filesToAnalyze]);
+      console.log("Analysis results:", data);
       setAnalysisData(data);
       toast.success("Analyse des bulletins terminée");
     } catch (error) {
@@ -66,34 +73,46 @@ const AppreciationGenerale = () => {
                   />
                 </div>
                 
-                <button
-                  onClick={analyzeFiles}
-                  disabled={isAnalyzing || currentClassReportFiles.length === 0}
-                  className={cn(
-                    "button-primary w-full flex items-center justify-center space-x-2 py-3",
-                    (isAnalyzing || currentClassReportFiles.length === 0) && "opacity-70 cursor-not-allowed"
-                  )}
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <span className="animate-spin mr-2">⌛</span>
-                      Analyse en cours...
-                    </>
-                  ) : (
-                    <>
-                      <TrendingUp className="h-4 w-4 mr-2" />
-                      Analyser les documents
-                    </>
-                  )}
-                </button>
+                {currentClassReportFiles.length > 0 && (
+                  <button
+                    onClick={() => analyzeFiles()}
+                    disabled={isAnalyzing}
+                    className={cn(
+                      "button-primary w-full flex items-center justify-center space-x-2 py-3",
+                      isAnalyzing && "opacity-70 cursor-not-allowed"
+                    )}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <span className="animate-spin mr-2">⌛</span>
+                        Analyse en cours...
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="h-4 w-4 mr-2" />
+                        Analyser à nouveau
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
             
-            <AppreciationGenerator 
-              type="class"
-              analysisData={analysisData}
-              maxChars={255}
-            />
+            {analysisData ? (
+              <AppreciationGenerator 
+                type="class"
+                analysisData={analysisData}
+                maxChars={255}
+              />
+            ) : (
+              <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
+                <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Aucune analyse disponible</h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Importez un bulletin de classe et lancez l'analyse pour générer une appréciation.
+                </p>
+              </div>
+            )}
           </div>
           
           <div className="space-y-4">
