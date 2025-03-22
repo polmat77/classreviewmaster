@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
-import { Search, Filter, RefreshCw, Save, UserPlus, Printer, FileText, List, Grid, Copy, BarChart, CheckCircle } from 'lucide-react';
+import { Search, Filter, RefreshCw, Save, UserPlus, Printer, FileText, List, Grid, Copy, BarChart, CheckCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ const AppreciationsIndividuelles = () => {
   const [individualReportFiles, setIndividualReportFiles] = useState<File[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   
   // State to track the currently selected student
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
@@ -52,6 +53,7 @@ const AppreciationsIndividuelles = () => {
     setIndividualReportFiles(files);
     setAnalysisData(null); // Reset analysis when new files are uploaded
     setSelectedStudent(null); // Reset selected student
+    setAnalysisError(null); // Clear any previous errors
     toast.success("Bulletins individuels importés avec succès");
   };
   
@@ -62,10 +64,16 @@ const AppreciationsIndividuelles = () => {
     }
     
     setIsAnalyzing(true);
+    setAnalysisError(null);
     
     try {
       const data = await processGradeFiles(individualReportFiles);
       console.log("Analysis complete, data available:", data);
+      
+      if (!data || !data.currentTerm || !data.currentTerm.students || data.currentTerm.students.length === 0) {
+        throw new Error("Aucune donnée d'élève n'a pu être extraite des fichiers");
+      }
+      
       setAnalysisData(data);
       
       // Set the first student as selected by default
@@ -76,7 +84,9 @@ const AppreciationsIndividuelles = () => {
       toast.success("Analyse des données terminée avec succès");
     } catch (error) {
       console.error("Error analyzing data:", error);
-      toast.error("Erreur lors de l'analyse des données");
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue lors de l'analyse";
+      setAnalysisError(errorMessage);
+      toast.error(`Erreur lors de l'analyse des données: ${errorMessage}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -91,7 +101,7 @@ const AppreciationsIndividuelles = () => {
     // Generate appreciations for all students
     const newAppreciations: Record<string, string> = {};
     analysisData.currentTerm.students.forEach((student: any) => {
-      // Generate simple appreciations based on average
+      // Generate appreciations based on average and individual subject performance
       let appreciation = "";
       const avg = student.average || 0;
       
@@ -103,6 +113,25 @@ const AppreciationsIndividuelles = () => {
         appreciation = `${student.name} obtient des résultats corrects mais qui pourraient être améliorés.`;
       } else {
         appreciation = `${student.name} rencontre des difficultés qui nécessitent un travail plus approfondi.`;
+      }
+      
+      // Add subject-specific comments if available
+      const goodSubjects = student.subjects
+        .filter((s: any) => s.grade >= 14)
+        .map((s: any) => s.name)
+        .slice(0, 2);
+        
+      const weakSubjects = student.subjects
+        .filter((s: any) => s.grade < 10)
+        .map((s: any) => s.name)
+        .slice(0, 2);
+        
+      if (goodSubjects.length > 0) {
+        appreciation += ` Points forts en ${goodSubjects.join(' et ')}.`;
+      }
+      
+      if (weakSubjects.length > 0) {
+        appreciation += ` Des progrès sont attendus en ${weakSubjects.join(' et ')}.`;
       }
       
       newAppreciations[student.name] = appreciation;
@@ -150,10 +179,17 @@ const AppreciationsIndividuelles = () => {
     return <span className="text-yellow-500">◆</span>;
   };
   
-  // Helper function to get subjects for a student
+  // Helper function to get subjects for a student with proper error handling
   const getStudentSubjects = (student: any) => {
-    if (!student || !student.subjects) return [];
-    return student.subjects.slice(0, 4); // Get first 4 subjects
+    if (!student) return [];
+    if (!student.subjects) return [];
+    
+    // Return either all subjects or first 4 if there are many
+    const subjectsToShow = student.subjects.length > 4 
+      ? student.subjects.slice(0, 4)
+      : student.subjects;
+      
+    return subjectsToShow;
   };
   
   // Placeholder message when no data is available
@@ -168,6 +204,26 @@ const AppreciationsIndividuelles = () => {
       </p>
     </div>
   );
+  
+  // Error message when analysis fails
+  const errorMessage = (
+    <div className="text-center p-6 space-y-4">
+      <div className="flex justify-center items-center space-x-2 text-destructive">
+        <AlertTriangle className="h-6 w-6" />
+        <span className="text-lg font-medium">Erreur d'analyse</span>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {analysisError || "Une erreur s'est produite lors de l'analyse des données."}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Veuillez vérifier le format de vos fichiers et réessayer.
+      </p>
+    </div>
+  );
+
+  // Get school name from analysis data
+  const schoolName = analysisData?.currentTerm?.schoolName;
+  const termInfo = analysisData?.currentTerm?.term;
   
   return (
     <Layout>
@@ -190,7 +246,7 @@ const AppreciationsIndividuelles = () => {
           <FileUploader 
             onFilesAccepted={handleIndividualReportUpload}
             acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
-            maxFiles={5}
+            maxFiles={30}
             label="Importer les bulletins individuels"
             description="Documents PDF, Excel ou CSV contenant les bulletins par élève"
           />
@@ -220,14 +276,24 @@ const AppreciationsIndividuelles = () => {
             <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30 rounded-md text-sm flex items-center text-green-700 dark:text-green-400">
               <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
               Analyse terminée ! {analysisData.currentTerm.students.length} élèves analysés avec une moyenne générale de {analysisData.currentTerm.classAverage.toFixed(1)}.
+              {schoolName && ` Établissement : ${schoolName}.`}
+              {termInfo && ` Période : ${termInfo}.`}
+            </div>
+          )}
+
+          {analysisError && (
+            <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md text-sm flex items-center text-red-700 dark:text-red-400">
+              <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+              Erreur : {analysisError}
             </div>
           )}
         </div>
         
         {/* Only show content if there's analysis data */}
-        {!analysisData ? (
-          noDataMessage
-        ) : (
+        {!analysisData && !analysisError && noDataMessage}
+        {analysisError && errorMessage}
+        
+        {analysisData && (
           <>
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-medium">Gestion des appréciations</h2>
@@ -376,7 +442,17 @@ const AppreciationsIndividuelles = () => {
                           {getStudentSubjects(selectedStudent).map((subject: any, index: number) => (
                             <div key={index} className="p-3 bg-secondary/50 rounded-lg">
                               <div className="text-xs text-muted-foreground">{subject.name}</div>
-                              <div className="text-lg font-medium">{subject.grade.toFixed(1)}</div>
+                              <div className="text-lg font-medium">{subject.grade?.toFixed(1) || "N/A"}</div>
+                              {subject.comment && (
+                                <div className="text-xs text-muted-foreground mt-1 line-clamp-1" title={subject.comment}>
+                                  {subject.comment}
+                                </div>
+                              )}
+                              {subject.teacher && (
+                                <div className="text-xs font-medium mt-1">
+                                  {subject.teacher}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

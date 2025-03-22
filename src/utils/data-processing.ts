@@ -54,13 +54,55 @@ export const processGradeFiles = async (files: File[]) => {
       throw new Error(`Unsupported file format: ${fileExtension}`);
     }));
     
+    // For French bulletin format, we might need to combine multiple student results
+    const combinedCurrentResults = combineIndividualBulletins(currentTermResults);
+    
     // Combine and analyze the results
-    return generateAnalysisData(currentTermResults, previousTermResults);
+    return generateAnalysisData(combinedCurrentResults, previousTermResults);
   } catch (error) {
     console.error('Error processing files:', error);
     throw new Error(`Erreur lors du traitement des fichiers: ${error}`);
   }
 };
+
+/**
+ * Combine individual student bulletins into a single class dataset
+ */
+function combineIndividualBulletins(results: ParsedFileData[]): ParsedFileData[] {
+  // If there's only one result or no results, just return it
+  if (results.length <= 1) return results;
+  
+  // Check if these appear to be individual student bulletins (one student per file)
+  const allHaveSingleStudent = results.every(result => result.students.length === 1);
+  
+  if (allHaveSingleStudent) {
+    console.log("Detected individual student bulletins, combining into a single class dataset");
+    
+    // Get all unique subjects from all bulletins
+    const allSubjects = new Set<string>();
+    results.forEach(result => {
+      result.subjects.forEach(subject => allSubjects.add(subject));
+    });
+    
+    // Determine common term info (use the first bulletin's info as a base)
+    const baseTermInfo = results[0].termInfo || {
+      term: 'Unknown',
+      class: 'Unknown'
+    };
+    
+    // Combine all students into a single list
+    const allStudents = results.map(result => result.students[0]);
+    
+    return [{
+      students: allStudents,
+      subjects: Array.from(allSubjects),
+      termInfo: baseTermInfo
+    }];
+  }
+  
+  // Otherwise, return original results
+  return results;
+}
 
 /**
  * Generate analysis data from parsed files
@@ -113,6 +155,24 @@ function generateAnalysisData(
       ...subjectData,
       previous: prevSubjectAvg,
       change: subjectData.current - prevSubjectAvg
+    };
+  });
+  
+  // Enhance student data with additional information from parsed files
+  const enhancedStudents = currentTerm.students.map(student => {
+    // Collect all subject data
+    const subjectData = Object.entries(student.grades).map(([subject, grade]) => ({
+      name: subject,
+      grade: grade || 0,
+      comment: student.comments?.[subject] || '',
+      teacher: student.teacherNames?.[subject] || '',
+      classAverage: student.classAvg?.[subject] || null
+    }));
+    
+    return {
+      name: student.name,
+      average: student.average || 0,
+      subjects: subjectData
     };
   });
   
@@ -177,6 +237,13 @@ function generateAnalysisData(
     subjects
   );
   
+  // Log some of the processed data for debugging
+  console.log("Processed data summary:");
+  console.log(`- Student count: ${enhancedStudents.length}`);
+  console.log(`- Subject count: ${subjects.length}`);
+  console.log(`- Class average: ${classAverage.toFixed(2)}`);
+  
+  // Final analysis data structure
   return {
     averages,
     distribution,
@@ -189,14 +256,8 @@ function generateAnalysisData(
         name: subj.name, 
         average: subj.current 
       })),
-      students: currentTerm.students.map(student => ({
-        name: student.name,
-        average: student.average || 0,
-        subjects: Object.entries(student.grades).map(([subject, grade]) => ({
-          name: subject,
-          grade: grade || 0
-        }))
-      }))
+      students: enhancedStudents,
+      schoolName: currentTerm.termInfo?.schoolName
     },
     previousTerms,
     categories,

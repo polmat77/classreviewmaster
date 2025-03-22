@@ -1,4 +1,3 @@
-
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -14,12 +13,19 @@ export interface ParsedFileData {
     comments?: {
       [subject: string]: string;
     };
+    teacherNames?: {
+      [subject: string]: string;
+    };
+    classAvg?: {
+      [subject: string]: number | null;
+    };
   }>;
   subjects: string[];
   termInfo?: {
     term: string;
     year?: string;
     class?: string;
+    schoolName?: string;
   };
 }
 
@@ -98,30 +104,34 @@ export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     
     let allText = '';
-    let allTables: any[] = [];
+    let allTextItems: any[] = [];
     
-    // Extract text and tables from all pages
+    // Extract text and positions from all pages
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       
-      // Extract text content
+      // Extract text content with positions
       const textContent = await page.getTextContent();
+      allTextItems = [...allTextItems, ...textContent.items];
+      
+      // Also keep the full text for fallback processing
       const pageText = textContent.items.map((item: any) => item.str).join(' ');
       allText += pageText + '\n';
-      
-      // Try to extract table-like structures based on text positioning
-      const tableData = extractTablesFromTextContent(textContent);
-      if (tableData.length > 0) {
-        allTables = [...allTables, ...tableData];
-      }
     }
     
-    console.log("Extracted PDF text sample:", allText.substring(0, 200) + "...");
+    console.log("PDF parsing started for file:", file.name);
     
-    // First try to process as a structured report with tables
-    if (allTables.length > 0) {
+    // Try to detect if this is a French bulletin format (like in the image)
+    if (isFrenchBulletinFormat(allText)) {
+      console.log("Detected French bulletin format, using specialized parser");
+      return parseFrenchBulletin(allTextItems, allText, file.name);
+    }
+    
+    // For other formats, try the table extraction approach
+    const extractedTables = extractTablesFromTextItems(allTextItems);
+    if (extractedTables.length > 0) {
       console.log("Tables detected in PDF, attempting structured parsing");
-      return processExtractedTables(allTables, allText, file.name);
+      return processExtractedTables(extractedTables, allText, file.name);
     }
     
     // Fall back to processing as unstructured text
@@ -135,32 +145,245 @@ export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
 };
 
 /**
- * Extract table-like structures from PDF text content based on item positions
+ * Detect if the PDF follows a French bulletin format
  */
-function extractTablesFromTextContent(textContent: any): any[] {
-  const items = textContent.items;
+function isFrenchBulletinFormat(text: string): boolean {
+  // Look for key indicators of French bulletin format
+  const frenchBulletinPatterns = [
+    /bulletin du \d+[èeé]me trimestre/i,
+    /appr[ée]ciations/i,
+    /mati[èe]res/i,
+    /moyennes/i,
+    /[ée]l[èe]ve/i,
+    /professeur/i,
+    /moyenne[s]? g[ée]n[ée]rale[s]?/i,
+  ];
   
-  // Sort items by vertical position (y), then by horizontal position (x)
-  const sortedItems = [...items].sort((a, b) => {
-    // Group items within ~10 units of each other on the y-axis as being on the same "row"
-    const yDiff = Math.abs(a.transform[5] - b.transform[5]);
-    if (yDiff < 10) {
-      return a.transform[4] - b.transform[4]; // Sort by x within the same row
+  // If multiple patterns match, it's likely a French bulletin
+  return frenchBulletinPatterns.filter(pattern => pattern.test(text)).length >= 3;
+}
+
+/**
+ * Parse French bulletin format specifically
+ */
+function parseFrenchBulletin(
+  textItems: any[], 
+  fullText: string,
+  filename: string
+): ParsedFileData {
+  try {
+    console.log("Starting specialized French bulletin parsing");
+    
+    // Extract student name
+    let studentName = "";
+    const nameMatch = fullText.match(/([A-Z]{2,}\s+[A-Za-zÀ-ÿ]+|[A-Za-zÀ-ÿ]+\s+[A-Z]{2,})/);
+    if (nameMatch) {
+      studentName = nameMatch[0].trim();
     }
-    return b.transform[5] - a.transform[5]; // Sort by y otherwise (top to bottom)
-  });
+    
+    // Try alternate pattern if no match found
+    if (!studentName) {
+      const altNameMatch = fullText.match(/([A-Z][a-zÀ-ÿ]+\s+[A-Z][a-zÀ-ÿ]+)/);
+      if (altNameMatch) {
+        studentName = altNameMatch[0].trim();
+      }
+    }
+    
+    // Check for name in a specific format like in the image (AELTERS Sarah)
+    if (!studentName) {
+      const bulletinNameMatch = fullText.match(/([A-Z]+\s+[A-Za-zÀ-ÿ]+)/);
+      if (bulletinNameMatch) {
+        studentName = bulletinNameMatch[0].trim();
+      }
+    }
+    
+    console.log("Extracted student name:", studentName);
+    
+    // Extract trimester information
+    let term = "Trimestre 1";
+    const trimMatch = fullText.match(/trimestre|Trimestre/i);
+    if (trimMatch) {
+      const numberMatch = fullText.match(/(\d+)[èeé]me\s+[Tt]rimestre/);
+      if (numberMatch && numberMatch[1]) {
+        term = `Trimestre ${numberMatch[1]}`;
+      }
+    }
+    
+    // Extract year
+    let year = "";
+    const yearMatch = fullText.match(/(\d{4})[\/\-](\d{4})/);
+    if (yearMatch) {
+      year = `${yearMatch[1]}-${yearMatch[2]}`;
+    } else {
+      const singleYearMatch = fullText.match(/20\d{2}/);
+      if (singleYearMatch) {
+        const yearNum = parseInt(singleYearMatch[0]);
+        year = `${yearNum}-${yearNum + 1}`;
+      }
+    }
+    
+    // Extract school name
+    let schoolName = "";
+    const schoolLines = fullText.split('\n').slice(0, 5); // Check first few lines
+    for (const line of schoolLines) {
+      if (line.includes("COLLEGE") || line.includes("LYCEE") || line.includes("ECOLE")) {
+        schoolName = line.trim();
+        break;
+      }
+    }
+    
+    // Extract class information
+    let className = "";
+    const classMatch = fullText.match(/classe\s*:\s*([^\n]+)/i) || 
+                      fullText.match(/(\d+[A-Z]\d*)/);
+    if (classMatch) {
+      className = classMatch[1].trim();
+    }
+    
+    // Extract subjects, grades, and comments using position-based analysis
+    // Group text items by rows (items with similar y-positions)
+    const rows = groupTextItemsByRows(textItems);
+    
+    // Find the header row that contains subject column headers
+    const headerRowIndex = findHeaderRowIndex(rows);
+    
+    // Extract subject data
+    const subjects: string[] = [];
+    const studentGrades: {[subject: string]: number | null} = {};
+    const classGrades: {[subject: string]: number | null} = {};
+    const comments: {[subject: string]: string} = {};
+    const teacherNames: {[subject: string]: string} = {};
+    
+    // Process data rows after the header
+    if (headerRowIndex !== -1) {
+      // First, identify column structure from the header row
+      const headerColumns = identifyColumnStructure(rows[headerRowIndex]);
+      
+      // Process each data row
+      for (let i = headerRowIndex + 1; i < rows.length; i++) {
+        const row = rows[i];
+        
+        // Skip rows that are too short
+        if (row.length < 3) continue;
+        
+        // Extract subject name from the first column
+        const subjectText = extractTextFromColumn(row, headerColumns.subjectCol);
+        
+        // Skip rows without clear subject name
+        if (!subjectText || subjectText.length < 3 || 
+            /moyenne|general|option/i.test(subjectText)) continue;
+            
+        subjects.push(subjectText);
+        
+        // Extract teacher name if available
+        const teacherText = extractTeacherName(row, subjectText);
+        if (teacherText) {
+          teacherNames[subjectText] = teacherText;
+        }
+        
+        // Extract student grade
+        const studentGradeText = extractTextFromColumn(row, headerColumns.studentGradeCol);
+        const studentGrade = parseGrade(studentGradeText);
+        studentGrades[subjectText] = studentGrade;
+        
+        // Extract class average grade
+        const classGradeText = extractTextFromColumn(row, headerColumns.classGradeCol);
+        const classGrade = parseGrade(classGradeText);
+        classGrades[subjectText] = classGrade;
+        
+        // Extract comment if available
+        const commentText = extractTextFromColumn(row, headerColumns.commentCol);
+        if (commentText && commentText.length > 10) {
+          comments[subjectText] = commentText;
+        }
+      }
+    } else {
+      // If header row not found, try fallback extraction methods
+      extractSubjectsAndGradesFromText(fullText, subjects, studentGrades, comments);
+    }
+    
+    // Extract overall average
+    let average: number | undefined;
+    const avgMatch = fullText.match(/moyenne[s]?\s*g[ée]n[ée]rale[s]?\s*[:\s]+(\d+[.,]\d+)/i);
+    if (avgMatch) {
+      average = parseFloat(avgMatch[1].replace(',', '.'));
+    } else {
+      // Look for a number near "moyenne générale"
+      const generalAvgItems = textItems.filter((item: any) => 
+        /moyenne[s]?\s*g[ée]n[ée]rale[s]?/i.test(item.str)
+      );
+      
+      if (generalAvgItems.length > 0) {
+        const generalAvgItem = generalAvgItems[0];
+        const nearbyNumberItems = textItems.filter((item: any) => {
+          const distance = Math.sqrt(
+            Math.pow(item.transform[4] - generalAvgItem.transform[4], 2) + 
+            Math.pow(item.transform[5] - generalAvgItem.transform[5], 2)
+          );
+          return distance < 100 && /^\d+[.,]\d+$/.test(item.str);
+        });
+        
+        if (nearbyNumberItems.length > 0) {
+          average = parseFloat(nearbyNumberItems[0].str.replace(',', '.'));
+        }
+      }
+    }
+    
+    // If no average found, calculate from grades
+    if (!average && Object.keys(studentGrades).length > 0) {
+      const validGrades = Object.values(studentGrades).filter(g => g !== null) as number[];
+      if (validGrades.length > 0) {
+        average = validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length;
+      }
+    }
+    
+    console.log("Extracted subjects:", subjects);
+    console.log("Extracted student grades:", studentGrades);
+    console.log("Extracted student average:", average);
+    
+    return {
+      students: [{
+        name: studentName || `Élève de ${filename}`,
+        grades: studentGrades,
+        average,
+        comments,
+        teacherNames,
+        classAvg: classGrades
+      }],
+      subjects,
+      termInfo: {
+        term,
+        year,
+        class: className,
+        schoolName
+      }
+    };
+  } catch (error) {
+    console.error("Error in French bulletin parsing:", error);
+    return createFallbackData(filename);
+  }
+}
+
+/**
+ * Group text items by rows based on y-position
+ */
+function groupTextItemsByRows(items: any[]): any[][] {
+  // Sort items by y-position (top to bottom)
+  const sortedItems = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
   
-  // Try to identify rows based on y-position clustering
-  const rows: any[] = [];
+  const rows: any[][] = [];
   let currentRow: any[] = [];
   let currentY: number | null = null;
+  const yThreshold = 5; // Items within this y-distance are considered the same row
   
   sortedItems.forEach(item => {
     const y = Math.round(item.transform[5]);
     
     // If this is a new row or the first item
-    if (currentY === null || Math.abs(y - currentY) > 10) {
+    if (currentY === null || Math.abs(y - currentY) > yThreshold) {
       if (currentRow.length > 0) {
+        // Sort items in the row by x-position (left to right)
+        currentRow.sort((a, b) => a.transform[4] - b.transform[4]);
         rows.push(currentRow);
       }
       currentRow = [item];
@@ -170,25 +393,293 @@ function extractTablesFromTextContent(textContent: any): any[] {
     }
   });
   
-  // Add the last row if it exists
+  // Add the last row
   if (currentRow.length > 0) {
+    currentRow.sort((a, b) => a.transform[4] - b.transform[4]);
     rows.push(currentRow);
   }
   
-  // Filter rows that look like table rows (have multiple items)
-  const tableRows = rows.filter(row => row.length >= 3);
-  
-  // If we have enough rows that might form a table
-  if (tableRows.length >= 3) {
-    // Convert row data to text
-    const textRows = tableRows.map(row => 
-      row.map((item: any) => item.str.trim())
-    );
+  return rows;
+}
+
+/**
+ * Find the header row index that contains subject column headers
+ */
+function findHeaderRowIndex(rows: any[][]): number {
+  for (let i = 0; i < rows.length; i++) {
+    const rowText = rows[i].map(item => item.str.toLowerCase()).join(' ');
     
-    return [textRows]; // Return as a table
+    // Look for patterns that indicate this is a header row
+    if (rowText.includes('matière') || 
+        rowText.includes('subject') || 
+        (rowText.includes('moyenne') && rowText.includes('élève')) ||
+        (rowText.includes('note') && rowText.includes('appréciation')) ||
+        (rowText.includes('classe') && rowText.includes('élève'))) {
+      return i;
+    }
   }
   
-  return []; // No tables detected
+  return -1;
+}
+
+/**
+ * Identify the column structure from the header row
+ */
+function identifyColumnStructure(headerRow: any[]): {
+  subjectCol: [number, number],
+  studentGradeCol: [number, number],
+  classGradeCol: [number, number],
+  commentCol: [number, number]
+} {
+  const headerTexts = headerRow.map(item => ({
+    text: item.str.toLowerCase(),
+    x: item.transform[4]
+  }));
+  
+  let subjectColStart = 0;
+  let subjectColEnd = 150; // Default values
+  let studentGradeColStart = 150;
+  let studentGradeColEnd = 200;
+  let classGradeColStart = 200;
+  let classGradeColEnd = 250;
+  let commentColStart = 250;
+  let commentColEnd = 1000;
+  
+  // Find subject column
+  const subjectHeader = headerTexts.find(h => 
+    h.text.includes('matière') || 
+    h.text.includes('subject') ||
+    h.text.includes('discipline')
+  );
+  
+  if (subjectHeader) {
+    subjectColStart = subjectHeader.x;
+    // Find next header to determine end of subject column
+    const nextHeader = headerTexts.find(h => h.x > subjectHeader.x);
+    if (nextHeader) {
+      subjectColEnd = nextHeader.x;
+    }
+  }
+  
+  // Find student grade column
+  const studentGradeHeader = headerTexts.find(h => 
+    h.text.includes('élève') || 
+    h.text.includes('note') ||
+    h.text.includes('student')
+  );
+  
+  if (studentGradeHeader) {
+    studentGradeColStart = studentGradeHeader.x;
+    // Find next header to determine end
+    const nextHeader = headerTexts.find(h => h.x > studentGradeHeader.x);
+    if (nextHeader) {
+      studentGradeColEnd = nextHeader.x;
+    }
+  }
+  
+  // Find class grade column
+  const classGradeHeader = headerTexts.find(h => 
+    h.text.includes('classe') || 
+    h.text.includes('class') ||
+    h.text.includes('moy') && !h.text.includes('élève')
+  );
+  
+  if (classGradeHeader) {
+    classGradeColStart = classGradeHeader.x;
+    // Find next header to determine end
+    const nextHeader = headerTexts.find(h => h.x > classGradeHeader.x);
+    if (nextHeader) {
+      classGradeColEnd = nextHeader.x;
+    }
+  }
+  
+  // Find comment column
+  const commentHeader = headerTexts.find(h => 
+    h.text.includes('appréciation') || 
+    h.text.includes('comment') ||
+    h.text.includes('remarque')
+  );
+  
+  if (commentHeader) {
+    commentColStart = commentHeader.x;
+    // Usually last column
+    commentColEnd = 1000;
+  }
+  
+  return {
+    subjectCol: [subjectColStart, subjectColEnd],
+    studentGradeCol: [studentGradeColStart, studentGradeColEnd],
+    classGradeCol: [classGradeColStart, classGradeColEnd],
+    commentCol: [commentColStart, commentColEnd]
+  };
+}
+
+/**
+ * Extract text from a specific column in a row
+ */
+function extractTextFromColumn(row: any[], columnRange: [number, number]): string {
+  const [start, end] = columnRange;
+  
+  const columnItems = row.filter(item => 
+    item.transform[4] >= start && item.transform[4] < end
+  );
+  
+  return columnItems.map(item => item.str).join(' ').trim();
+}
+
+/**
+ * Extract teacher name from row data
+ */
+function extractTeacherName(row: any[], subjectText: string): string {
+  // Teacher names often follow a pattern like "M. NAME" or "Mme NAME"
+  const teacherPatterns = [
+    /M\.\s+([A-Z]+)/,
+    /Mme\s+([A-Z]+)/,
+    /M[r]?\s+([A-Z]+)/,
+    /M\s+([A-Z]+)/,
+  ];
+  
+  const rowText = row.map(item => item.str).join(' ');
+  
+  for (const pattern of teacherPatterns) {
+    const match = rowText.match(pattern);
+    if (match && match[1]) {
+      return match[0].trim();
+    }
+  }
+  
+  return '';
+}
+
+/**
+ * Parse a grade from text, handling different formats
+ */
+function parseGrade(text: string): number | null {
+  // Clean the text and look for numbers
+  const cleanText = text.trim();
+  
+  if (!cleanText) return null;
+  
+  // Handle various grade formats: 12,5 or 12.5 or 12.5/20
+  const gradeMatch = cleanText.match(/(\d+[.,]\d+)/) || cleanText.match(/^(\d+)$/);
+  
+  if (gradeMatch && gradeMatch[1]) {
+    return parseFloat(gradeMatch[1].replace(',', '.'));
+  }
+  
+  return null;
+}
+
+/**
+ * Fallback method to extract subjects and grades from text
+ */
+function extractSubjectsAndGradesFromText(
+  text: string, 
+  subjects: string[], 
+  grades: {[subject: string]: number | null},
+  comments: {[subject: string]: string}
+) {
+  // Common subjects in French curriculum
+  const commonSubjects = [
+    'FRANÇAIS', 'MATHEMATIQUES', 'HISTOIRE-GEOGRAPHIE', 'ANGLAIS', 
+    'PHYSIQUE-CHIMIE', 'SVT', 'TECHNOLOGIE', 'EPS', 'ARTS PLASTIQUES',
+    'EDUCATION MUSICALE', 'ESPAGNOL', 'ALLEMAND', 'LATIN'
+  ];
+  
+  // Look for subjects in the text
+  for (const subject of commonSubjects) {
+    // Create a regex that's not case sensitive
+    const regex = new RegExp(subject, 'i');
+    
+    if (regex.test(text)) {
+      // Find the subject in the text
+      const subjectIndex = text.search(regex);
+      if (subjectIndex !== -1) {
+        // Extract the exact subject text from the PDF
+        const exactSubject = text.substring(subjectIndex, subjectIndex + subject.length);
+        subjects.push(exactSubject);
+        
+        // Look for grades near the subject (within the next 50 characters)
+        const nearbyText = text.substring(subjectIndex, subjectIndex + 50);
+        const gradeMatch = nearbyText.match(/(\d+[.,]\d+)/);
+        
+        if (gradeMatch && gradeMatch[1]) {
+          grades[exactSubject] = parseFloat(gradeMatch[1].replace(',', '.'));
+        } else {
+          grades[exactSubject] = null;
+        }
+        
+        // Look for comments (longer text after the grade)
+        const lines = text.substring(subjectIndex).split('\n');
+        if (lines.length > 1) {
+          // Skip the subject line, take the next non-empty line as a comment
+          for (let i = 1; i < lines.length; i++) {
+            if (lines[i].length > 20 && !/^\d+[.,]\d+/.test(lines[i])) {
+              comments[exactSubject] = lines[i].trim();
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Enhanced function to extract tables from text items
+ */
+function extractTablesFromTextItems(textItems: any[]): any[] {
+  // Group items by rows
+  const rows = groupTextItemsByRows(textItems);
+  
+  // Identify potential table rows (rows with similar structure)
+  const tableRows: any[][] = [];
+  let potentialTableStartIndex = -1;
+  
+  // Find rows that have numbers which could be grades
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowText = row.map((item: any) => item.str).join(' ');
+    
+    // Look for rows with numeric grades (numbers with commas or dots)
+    if (/\d+[.,]\d+/.test(rowText)) {
+      // If this is the first potential table row we've found
+      if (potentialTableStartIndex === -1) {
+        // Look back 1-2 rows for a header row
+        potentialTableStartIndex = Math.max(0, i - 2);
+      }
+      
+      tableRows.push(row);
+    } else if (potentialTableStartIndex !== -1 && tableRows.length > 0) {
+      // If we already found some table rows but this row doesn't match,
+      // check if it could be a continuation of a comment
+      const lastRowText = rows[i-1].map((item: any) => item.str).join(' ');
+      
+      // If the last row ended with punctuation, this is probably not a continuation
+      if (/[.!?]$/.test(lastRowText) || /^\d+[.,]\d+/.test(rowText)) {
+        // This row is likely not part of the table anymore
+        break;
+      } else {
+        // This might be a continuation of a comment cell
+        tableRows.push(row);
+      }
+    }
+  }
+  
+  // If we found enough rows that might form a table
+  if (tableRows.length >= 3) {
+    // Add the header row(s)
+    const headerRows = rows.slice(potentialTableStartIndex, potentialTableStartIndex + 2);
+    
+    // Convert to a more structured format
+    const structuredTable = [...headerRows, ...tableRows].map(row => 
+      row.map((item: any) => item.str)
+    );
+    
+    return [structuredTable];
+  }
+  
+  return [];
 }
 
 /**
