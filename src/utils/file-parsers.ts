@@ -1,3 +1,4 @@
+
 import * as XLSX from 'xlsx';
 import * as Papa from 'papaparse';
 import * as pdfjs from 'pdfjs-dist';
@@ -665,7 +666,11 @@ function extractTableData(
   
   textPositions.forEach(pos => {
     if (currentY === -1 || Math.abs(pos.y - currentY) <= yTolerance) {
-      currentRow.push(pos);
+      currentRow.push({
+        text: pos.text,
+        x: pos.x,
+        y: pos.y
+      });
       currentY = pos.y;
     } else {
       if (currentRow.length > 0) {
@@ -673,7 +678,11 @@ function extractTableData(
         currentRow.sort((a, b) => a.x - b.x);
         rows.push(currentRow);
       }
-      currentRow = [pos];
+      currentRow = [{
+        text: pos.text,
+        x: pos.x,
+        y: pos.y
+      }];
       currentY = pos.y;
     }
   });
