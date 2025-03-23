@@ -1,4 +1,3 @@
-
 import * as XLSX from 'xlsx';
 import * as Papa from 'papaparse';
 import * as pdfjs from 'pdfjs-dist';
@@ -1109,63 +1108,129 @@ export function parseBulletin(text: string): BulletinData {
     appreciation: ''
   };
 
-  // Extraction du nom (exemple : "Nom : Dupont")
-  const nomMatch = text.match(/Nom\s*:\s*(.*)/i);
+  // Extraction du nom (exemple : "Bulletin du 2ème Trimestre [NOM PRÉNOM]")
+  const nomMatch = text.match(/Bulletin du 2ème Trimestre\s+([A-ZÉÈÊÀÂÙÎÔÇ][a-zéèêàâùîôç]+\s+[A-ZÉÈÊÀÂÙÎÔÇ][a-zéèêàâùîôç]+)/) || 
+                   text.match(/Nom\s*:?\s*(.*)/i) || 
+                   text.match(/Élève\s*:?\s*(.*)/i);
   if (nomMatch) {
     data.nom = nomMatch[1].trim();
-  } else {
-    // Try alternative patterns for name extraction
-    const altNomMatch = text.match(/Élève\s*:\s*(.*)/i) || 
-                         text.match(/Eleve\s*:\s*(.*)/i) ||
-                         text.match(/Bulletin de\s*:\s*(.*)/i);
-    if (altNomMatch) {
-      data.nom = altNomMatch[1].trim();
-    }
   }
 
-  // Extraction de la classe (exemple : "Classe : 3e")
-  const classeMatch = text.match(/Classe\s*:\s*(.*?)(\.|\n|$)/i);
+  // Extraction de la classe
+  const classeMatch = text.match(/Classe\s*:?\s*(\S+)/i) || 
+                      text.match(/classe\s*:?\s*(.+?)(\s|\.|$)/i);
   if (classeMatch) {
     data.classe = classeMatch[1].trim();
   }
 
-  // Extraction de la moyenne générale (exemple : "Moyenne générale : 15.2")
-  const moyenneGenMatch = text.match(/Moyenne générale\s*:?\s*([\d.,]+)/i) || 
-                           text.match(/Moyenne de l['']élève\s*:?\s*([\d.,]+)/i);
+  // Extraction de la moyenne générale
+  const moyenneGenMatch = text.match(/Moyennes générales\s+([\d.,]+)/i) || 
+                          text.match(/Moyenne générale\s*:?\s*([\d.,]+)/i) || 
+                          text.match(/Moyenne de l['']élève\s*:?\s*([\d.,]+)/i);
   if (moyenneGenMatch) {
     data.moyenne_generale = parseFloat(moyenneGenMatch[1].replace(',', '.'));
   }
 
   // Extraction des moyennes par matière
-  // On recherche des lignes du type "Mathématiques : 14.5"
-  const subjectRegex = /([A-Za-zÀ-ÖØ-öø-ÿéèêàâùîôç -]+)\s*:\s*([\d.,]+)/gi;
-  let match;
+  // On recherche des lignes du type "MATHEMATIQUES ... 9,15 ..."
+  const subjectRegex = /([A-ZÉÈÊÀÂÙÎÔÇ][A-ZÉÈÊÀÂÙÎÔÇ\s-]+)\s+[\w\.\s-]*\s+([\d.,]+)/gi;
+  const simpleSubjectRegex = /([A-Za-zÀ-ÖØ-öø-ÿéèêàâùîôç -]+)\s*:\s*([\d.,]+)/gi;
   
+  // Try first with the specialized format
+  let match;
   while ((match = subjectRegex.exec(text)) !== null) {
-    const label = match[1].trim().toLowerCase();
-    // On évite de réinjecter des données déjà extraites (nom, classe, moyenne générale)
-    if (!label.includes('nom') && 
-        !label.includes('classe') && 
-        !label.includes('moyenne') && 
-        !label.includes('élève') &&
-        !label.includes('eleve')) {
-      data.matieres[match[1].trim()] = parseFloat(match[2].replace(',', '.'));
+    const subject = match[1].trim();
+    // Exclude headers that are not subjects
+    if (!subject.match(/BULLETIN|MOYENNES|NOM|CLASSE/i)) {
+      data.matieres[subject] = parseFloat(match[2].replace(',', '.'));
+    }
+  }
+  
+  // If no subjects found, try with the simpler format
+  if (Object.keys(data.matieres).length === 0) {
+    let simpleMatch;
+    while ((simpleMatch = simpleSubjectRegex.exec(text)) !== null) {
+      const label = simpleMatch[1].trim().toLowerCase();
+      // Avoid re-injecting already extracted data
+      if (!label.includes('nom') && 
+          !label.includes('classe') && 
+          !label.includes('moyenne') && 
+          !label.includes('élève') &&
+          !label.includes('eleve')) {
+        data.matieres[simpleMatch[1].trim()] = parseFloat(simpleMatch[2].replace(',', '.'));
+      }
     }
   }
 
-  // Extraction de l'appréciation (exemple : "Appréciation : Bon travail, à maintenir.")
-  const appreciationMatch = text.match(/Appréciation\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is);
+  // Extraction de l'appréciation
+  const appreciationMatch = text.match(/(Ensemble[^.]+\.)/i) || 
+                           text.match(/Appréciation\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is) ||
+                           text.match(/Appréciation générale\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is);
   if (appreciationMatch) {
-    data.appreciation = appreciationMatch[1].trim();
-  } else {
-    // Try alternative patterns
-    const altAppreciationMatch = text.match(/Appréciation générale\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is) ||
-                                 text.match(/Commentaire\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is);
-    if (altAppreciationMatch) {
-      data.appreciation = altAppreciationMatch[1].trim();
-    }
+    data.appreciation = appreciationMatch[1]?.trim() || '';
   }
 
   return data;
 }
 
+/**
+ * Fonction permettant de parser l'intégralité du PDF contenant plusieurs bulletins.
+ */
+export function parseMultiBulletins(text: string): BulletinData[] {
+  console.log("Parsing multiple bulletins from text:", text.substring(0, 500) + "...");
+  
+  // On découpe le texte par le séparateur unique de chaque bulletin.
+  // Ici, on suppose que chaque bulletin commence par "Bulletin du 2ème Trimestre"
+  const bulletinSeparator = "Bulletin du 2ème Trimestre";
+  
+  // Split the text by the separator, but keep track of the separator
+  const segments = text.split(new RegExp(`(${bulletinSeparator})`, 'i')).filter(segment => segment.trim().length > 0);
+  console.log(`Found ${segments.length} segments`);
+  
+  // Reconstruct the segments properly
+  const bulletinSegments: string[] = [];
+  let currentSegment = "";
+  
+  for (const segment of segments) {
+    if (segment.trim() === bulletinSeparator) {
+      // Start a new segment
+      if (currentSegment) {
+        bulletinSegments.push(currentSegment);
+      }
+      currentSegment = bulletinSeparator;
+    } else {
+      // Continue the current segment
+      currentSegment += segment;
+    }
+  }
+  
+  // Add the last segment
+  if (currentSegment) {
+    bulletinSegments.push(currentSegment);
+  }
+  
+  console.log(`Reconstructed ${bulletinSegments.length} bulletin segments`);
+  
+  // Parse each bulletin segment
+  const bulletins: BulletinData[] = [];
+  
+  for (let i = 0; i < bulletinSegments.length; i++) {
+    try {
+      const bulletin = parseBulletin(bulletinSegments[i]);
+      
+      // Verify the bulletin has enough data to be considered valid
+      if (bulletin.nom || bulletin.classe || Object.keys(bulletin.matieres).length > 0) {
+        bulletins.push(bulletin);
+        console.log(`Successfully parsed bulletin ${i+1}: ${bulletin.nom}`);
+      } else {
+        console.warn(`Bulletin segment ${i+1} did not yield valid data, skipping`);
+      }
+    } catch (error) {
+      console.error(`Error parsing bulletin segment ${i+1}:`, error);
+      // Continue with the next segment
+    }
+  }
+  
+  console.log(`Successfully parsed ${bulletins.length} bulletins`);
+  return bulletins;
+}

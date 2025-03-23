@@ -1,4 +1,4 @@
-import { parseExcelFile, parseCsvFile, parsePdfFile, ParsedFileData, parseBulletin, BulletinData } from './file-parsers';
+import { parseExcelFile, parseCsvFile, parsePdfFile, ParsedFileData, parseBulletin, BulletinData, parseMultiBulletins } from './file-parsers';
 import { extractTextFromPDF } from './pdf-service';
 
 /**
@@ -107,6 +107,49 @@ export async function processBulletin(file: File): Promise<BulletinData> {
   } catch (error) {
     console.error("Erreur lors du traitement du bulletin:", error);
     throw new Error(`Erreur lors du traitement du bulletin: ${error}`);
+  }
+}
+
+/**
+ * Process multiple bulletins from a single PDF file
+ * @param file The uploaded PDF file containing multiple bulletins
+ * @returns Array of processed bulletin data
+ */
+export async function processMultiBulletins(file: File): Promise<BulletinData[]> {
+  try {
+    console.log(`Processing multi-bulletin file: ${file.name} (${file.type}, ${file.size} bytes)`);
+    
+    // Check if the file is a PDF
+    if (!file.type.includes('pdf')) {
+      throw new Error('Le fichier doit être au format PDF');
+    }
+    
+    // Extract text from the PDF
+    console.log("Extracting text from PDF...");
+    const text = await extractTextFromPDF(file);
+    
+    // Log a sample of the extracted text
+    console.log("Sample of extracted text:", text.substring(0, 300) + "...");
+    
+    // Parse the extracted text to multiple bulletin data
+    console.log("Parsing multiple bulletins...");
+    const bulletins = parseMultiBulletins(text);
+    
+    // Log the extraction results
+    console.log(`Extracted ${bulletins.length} bulletins from PDF`);
+    
+    // Validate the data
+    if (bulletins.length === 0) {
+      console.warn("Aucun bulletin n'a été extrait du PDF");
+      toast.warning("Aucun bulletin n'a pu être extrait du document PDF", {
+        duration: 5000
+      });
+    }
+    
+    return bulletins;
+  } catch (error) {
+    console.error("Erreur lors du traitement des bulletins:", error);
+    throw new Error(`Erreur lors du traitement des bulletins: ${error}`);
   }
 }
 
