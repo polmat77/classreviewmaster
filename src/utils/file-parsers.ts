@@ -1,3 +1,4 @@
+
 import * as XLSX from 'xlsx';
 import * as Papa from 'papaparse';
 import * as pdfjs from 'pdfjs-dist';
@@ -820,7 +821,7 @@ function extractSingleStudentData(
 
 function extractClassData(
   textContent: string[], 
-  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
+  textPositions: Array<{text: string; x: number; y: number; height: number; width: number; page: number}>
 ): ParsedFileData {
   const rows = identifyTableRows(textPositions);
   
@@ -909,9 +910,9 @@ function extractClassData(
 }
 
 function identifyTableRows(
-  textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
-): Array<Array<{text: string, x: number, y: number}>> {
-  const yGroups: Record<number, Array<{text: string, x: number, y: number}>> = {};
+  textPositions: Array<{text: string; x: number; y: number; height: number; width: number; page: number}>
+): Array<Array<{text: string; x: number; y: number}>> {
+  const yGroups: Record<number, Array<{text: string; x: number; y: number}>> = {};
   const yTolerance = 5;
   
   textPositions.forEach(pos => {
@@ -930,7 +931,7 @@ function identifyTableRows(
   
   const sortedYs = Object.keys(yGroups).map(Number).sort((a, b) => b - a);
   
-  const rows: Array<Array<{text: string, x: number, y: number}>> = [];
+  const rows: Array<Array<{text: string; x: number; y: number}>> = [];
   
   sortedYs.forEach(y => {
     // Make sure all items have the required properties
