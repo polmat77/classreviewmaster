@@ -21,6 +21,15 @@ export interface ParsedFileData {
   };
 }
 
+// Define the bulletin data structure as requested
+export interface BulletinData {
+  nom: string;
+  classe: string;
+  moyenne_generale: number;
+  matieres: { [key: string]: number };
+  appreciation: string;
+}
+
 // Main function to parse Excel files
 export const parseExcelFile = async (file: File): Promise<ParsedFileData> => {
   return new Promise((resolve, reject) => {
@@ -1080,3 +1089,74 @@ function createFallbackData(namePrefix: string): ParsedFileData {
     }
   };
 }
+
+// Parse bulletin text to extract structured data
+export function parseBulletin(text: string): BulletinData {
+  const data: BulletinData = {
+    nom: '',
+    classe: '',
+    moyenne_generale: 0,
+    matieres: {},
+    appreciation: ''
+  };
+
+  // Extraction du nom (exemple : "Nom : Dupont")
+  const nomMatch = text.match(/Nom\s*:\s*(.*)/i);
+  if (nomMatch) {
+    data.nom = nomMatch[1].trim();
+  } else {
+    // Try alternative patterns for name extraction
+    const altNomMatch = text.match(/Élève\s*:\s*(.*)/i) || 
+                         text.match(/Eleve\s*:\s*(.*)/i) ||
+                         text.match(/Bulletin de\s*:\s*(.*)/i);
+    if (altNomMatch) {
+      data.nom = altNomMatch[1].trim();
+    }
+  }
+
+  // Extraction de la classe (exemple : "Classe : 3e")
+  const classeMatch = text.match(/Classe\s*:\s*(.*?)(\.|\n|$)/i);
+  if (classeMatch) {
+    data.classe = classeMatch[1].trim();
+  }
+
+  // Extraction de la moyenne générale (exemple : "Moyenne générale : 15.2")
+  const moyenneGenMatch = text.match(/Moyenne générale\s*:?\s*([\d.,]+)/i) || 
+                           text.match(/Moyenne de l['']élève\s*:?\s*([\d.,]+)/i);
+  if (moyenneGenMatch) {
+    data.moyenne_generale = parseFloat(moyenneGenMatch[1].replace(',', '.'));
+  }
+
+  // Extraction des moyennes par matière
+  // On recherche des lignes du type "Mathématiques : 14.5"
+  const subjectRegex = /([A-Za-zÀ-ÖØ-öø-ÿéèêàâùîôç -]+)\s*:\s*([\d.,]+)/gi;
+  let match;
+  
+  while ((match = subjectRegex.exec(text)) !== null) {
+    const label = match[1].trim().toLowerCase();
+    // On évite de réinjecter des données déjà extraites (nom, classe, moyenne générale)
+    if (!label.includes('nom') && 
+        !label.includes('classe') && 
+        !label.includes('moyenne') && 
+        !label.includes('élève') &&
+        !label.includes('eleve')) {
+      data.matieres[match[1].trim()] = parseFloat(match[2].replace(',', '.'));
+    }
+  }
+
+  // Extraction de l'appréciation (exemple : "Appréciation : Bon travail, à maintenir.")
+  const appreciationMatch = text.match(/Appréciation\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is);
+  if (appreciationMatch) {
+    data.appreciation = appreciationMatch[1].trim();
+  } else {
+    // Try alternative patterns
+    const altAppreciationMatch = text.match(/Appréciation générale\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is) ||
+                                 text.match(/Commentaire\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is);
+    if (altAppreciationMatch) {
+      data.appreciation = altAppreciationMatch[1].trim();
+    }
+  }
+
+  return data;
+}
+

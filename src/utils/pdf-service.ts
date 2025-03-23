@@ -49,3 +49,39 @@ export const initPdfJs = () => {
     return () => {};
   }
 };
+
+// Extract text from PDF file
+export async function extractTextFromPDF(file: File): Promise<string> {
+  try {
+    console.log("Starting PDF text extraction...");
+    const arrayBuffer = await file.arrayBuffer();
+    
+    // Load the PDF document
+    console.log("Loading PDF document...");
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    
+    console.log(`PDF loaded with ${pdf.numPages} pages`);
+    
+    // Extract text from all pages
+    let extractedText = '';
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+      console.log(`Extracting text from page ${i}...`);
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      
+      // Concatenate text items
+      const pageText = content.items
+        .map((item: any) => item.str)
+        .join(' ');
+        
+      extractedText += pageText + '\n';
+    }
+    
+    console.log('Text extraction complete');
+    return extractedText;
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error);
+    throw new Error(`Erreur lors de l'extraction du texte: ${error}`);
+  }
+}

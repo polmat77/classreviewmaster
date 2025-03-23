@@ -1,4 +1,5 @@
-import { parseExcelFile, parseCsvFile, parsePdfFile, ParsedFileData } from './file-parsers';
+import { parseExcelFile, parseCsvFile, parsePdfFile, ParsedFileData, parseBulletin, BulletinData } from './file-parsers';
+import { extractTextFromPDF } from './pdf-service';
 
 /**
  * Process uploaded grade files
@@ -64,6 +65,50 @@ export const processGradeFiles = async (files: File[]) => {
     throw new Error(`Erreur lors du traitement des fichiers: ${error}`);
   }
 };
+
+/**
+ * Process bulletin PDF files
+ * @param file The uploaded bulletin PDF file
+ * @returns Processed bulletin data
+ */
+export async function processBulletin(file: File): Promise<BulletinData> {
+  try {
+    console.log(`Processing bulletin file: ${file.name} (${file.type}, ${file.size} bytes)`);
+    
+    // Check if the file is a PDF
+    if (!file.type.includes('pdf')) {
+      throw new Error('Le fichier doit être au format PDF');
+    }
+    
+    // Extract text from the PDF
+    const text = await extractTextFromPDF(file);
+    
+    // Parse the extracted text to bulletin data
+    console.log("Parsing bulletin text...");
+    const bulletinData = parseBulletin(text);
+    
+    // Log the extracted data for debugging
+    console.log("Bulletin extraction complete:", bulletinData);
+    
+    // Validate the data
+    if (!bulletinData.nom) {
+      console.warn("Nom d'élève non détecté dans le bulletin");
+    }
+    
+    if (bulletinData.moyenne_generale === 0) {
+      console.warn("Moyenne générale non détectée dans le bulletin");
+    }
+    
+    if (Object.keys(bulletinData.matieres).length === 0) {
+      console.warn("Aucune matière détectée dans le bulletin");
+    }
+    
+    return bulletinData;
+  } catch (error) {
+    console.error("Erreur lors du traitement du bulletin:", error);
+    throw new Error(`Erreur lors du traitement du bulletin: ${error}`);
+  }
+}
 
 /**
  * Combine individual student bulletins into a single class dataset
