@@ -770,12 +770,10 @@ function extractSingleStudentData(
 ): ParsedFileData {
   const fullText = textContent.join(' ');
   
-  let studentName = '';
+  let studentName = 'Élève non identifié';
   const nameMatches = fullText.match(/nom\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\s|$)/i);
   if (nameMatches && nameMatches[1]) {
     studentName = nameMatches[1].trim();
-  } else {
-    studentName = 'Élève non identifié';
   }
   
   const subjects: string[] = [];
@@ -873,7 +871,10 @@ function extractClassData(
     let gradeCount = 0;
     
     for (let j = 0; j < Math.min(subjects.length, row.length); j++) {
-      const colIndex = headerRow.indexOf(headerRow.find(cell => cell.text.trim() === subjects[j]) || {text: ''});
+      const subjectHeader = headerRow.find(cell => cell.text.trim() === subjects[j]);
+      if (!subjectHeader) continue;
+      
+      const colIndex = headerRow.indexOf(subjectHeader);
       if (colIndex === -1 || colIndex >= row.length) continue;
       
       const gradeText = row[colIndex].text.trim().replace(',', '.');
@@ -1100,4 +1101,3 @@ export function parseMultiBulletins(text: string): BulletinData[] {
   console.log(`Successfully parsed ${bulletins.length} bulletins`);
   return bulletins;
 }
-
