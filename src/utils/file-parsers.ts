@@ -3,7 +3,6 @@ import * as Papa from 'papaparse';
 import * as pdfjs from 'pdfjs-dist';
 import { toast } from 'sonner';
 
-// Define the shape of the data parsed from files
 export interface ParsedFileData {
   students: Array<{
     name: string;
@@ -21,7 +20,6 @@ export interface ParsedFileData {
   };
 }
 
-// Define the bulletin data structure as requested
 export interface BulletinData {
   nom: string;
   classe: string;
@@ -30,7 +28,6 @@ export interface BulletinData {
   appreciation: string;
 }
 
-// Main function to parse Excel files
 export const parseExcelFile = async (file: File): Promise<ParsedFileData> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -45,7 +42,6 @@ export const parseExcelFile = async (file: File): Promise<ParsedFileData> => {
         const excelData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         console.log('Parsed Excel data:', excelData);
         
-        // Process the excel data into the required format
         const result = processExcelData(excelData as any[][]);
         resolve(result);
       } catch (error) {
@@ -62,20 +58,15 @@ export const parseExcelFile = async (file: File): Promise<ParsedFileData> => {
   });
 };
 
-// Function to process Excel data
 function processExcelData(data: any[][]): ParsedFileData {
-  // Try to detect different Excel formats (French bulletin, raw grades, etc.)
   if (detectFrenchBulletinFormat(data)) {
     return parseFrenchBulletinFormat(data);
   }
 
-  // For a raw grade table, try to determine standard structure
   return parseStandardGradeTable(data);
 }
 
-// Detect if the Excel follows French bulletin format
 function detectFrenchBulletinFormat(data: any[][]): boolean {
-  // Look for typical French bulletin headers or structures
   const headers = data[0] || [];
   const firstRowStr = headers.join(' ').toLowerCase();
   
@@ -84,17 +75,13 @@ function detectFrenchBulletinFormat(data: any[][]): boolean {
          firstRowStr.includes('trimestre');
 }
 
-// Parse French bulletin format
 function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
-  // Implementation specific to French bulletin format
-  // This would need to be adapted based on the exact structure
   const subjects: string[] = [];
   let studentName = '';
   let className = '';
   let termName = '';
   let schoolName = '';
   
-  // Extract school name, term and class info from top rows
   for (let i = 0; i < 5; i++) {
     const rowStr = data[i]?.join(' ') || '';
     
@@ -103,7 +90,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
     }
     
     if (rowStr.toLowerCase().includes('trimestre')) {
-      // Extract trimester info
       const trimMatch = rowStr.match(/trimestre\s*(\d)/i);
       if (trimMatch) {
         termName = `Trimestre ${trimMatch[1]}`;
@@ -115,7 +101,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
     }
     
     if (rowStr.toLowerCase().includes('élève:') || rowStr.toLowerCase().includes('élève :')) {
-      // Extract student name
       const nameMatch = rowStr.match(/élève\s*:\s*(.+)/i);
       if (nameMatch) {
         studentName = nameMatch[1].trim();
@@ -123,7 +108,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
     }
   }
   
-  // Find where the grades table starts
   let tableStartIndex = 0;
   for (let i = 0; i < data.length; i++) {
     const rowStr = data[i]?.join(' ').toLowerCase() || '';
@@ -136,7 +120,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
     }
   }
   
-  // Extract headers
   const headers = data[tableStartIndex] || [];
   let subjectColIndex = -1;
   let gradeColIndex = -1;
@@ -163,7 +146,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
     }
   });
   
-  // Extract subject data
   const grades: {[subject: string]: number | null} = {};
   const comments: {[subject: string]: string} = {};
   const teachers: {[subject: string]: string} = {};
@@ -177,7 +159,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
     
     const subject = String(row[subjectColIndex]).trim();
     if (!subject || subject.toLowerCase() === 'moyenne générale') {
-      // Check if this is the final average row
       if (row.some(cell => String(cell).toLowerCase().includes('moyenne') && 
                            String(cell).toLowerCase().includes('générale'))) {
         const avgCell = row[gradeColIndex];
@@ -190,7 +171,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
     
     subjects.push(subject);
     
-    // Extract grade
     if (gradeColIndex >= 0 && row[gradeColIndex] !== undefined) {
       const grade = parseFloat(String(row[gradeColIndex]).replace(',', '.'));
       if (!isNaN(grade)) {
@@ -204,24 +184,20 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
       grades[subject] = null;
     }
     
-    // Extract comment
     if (commentColIndex >= 0 && row[commentColIndex]) {
       comments[subject] = String(row[commentColIndex]).trim();
     }
     
-    // Extract teacher
     if (teacherColIndex >= 0 && row[teacherColIndex]) {
       teachers[subject] = String(row[teacherColIndex]).trim();
     }
     
-    // Extract class average
     if (classAvgColIndex >= 0 && row[classAvgColIndex] !== undefined) {
       const avg = parseFloat(String(row[classAvgColIndex]).replace(',', '.'));
       classAvg[subject] = !isNaN(avg) ? avg : null;
     }
   }
   
-  // If we didn't find specific student average but have grades
   if (studentAverage === 0 && gradeCount > 0) {
     studentAverage = studentAverage / gradeCount;
   }
@@ -244,7 +220,6 @@ function parseFrenchBulletinFormat(data: any[][]): ParsedFileData {
   };
 }
 
-// Parse standard grade table format
 function parseStandardGradeTable(data: any[][]): ParsedFileData {
   const headers = data[0] || [];
   let nameColIndex = -1;
@@ -252,7 +227,6 @@ function parseStandardGradeTable(data: any[][]): ParsedFileData {
   let classNameRow = '';
   let termNameRow = '';
   
-  // Try to detect "classe" and "trimestre" from the first few rows
   for (let i = 0; i < Math.min(5, data.length); i++) {
     const rowStr = data[i]?.join(' ').toLowerCase() || '';
     if (rowStr.includes('classe')) {
@@ -263,7 +237,6 @@ function parseStandardGradeTable(data: any[][]): ParsedFileData {
     }
   }
   
-  // Find column indices
   headers.forEach((header, index) => {
     const headerStr = String(header).toLowerCase();
     if (headerStr === 'nom' || headerStr === 'élève' || headerStr === 'etudiant' || 
@@ -271,28 +244,23 @@ function parseStandardGradeTable(data: any[][]): ParsedFileData {
       nameColIndex = index;
     } else if (headerStr && !headerStr.includes('moyenne') && 
               !headerStr.includes('total') && !headerStr.includes('rang')) {
-      // Assume this is a subject
       subjectIndices.push(index);
     }
   });
   
-  // Extract subjects
   const subjects = subjectIndices.map(idx => String(headers[idx]));
   
-  // Process student data rows
   const students: ParsedFileData['students'] = [];
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (!row || row.length === 0) continue;
     
-    // Skip rows without a name
     if (nameColIndex >= 0 && !row[nameColIndex]) continue;
     
     const studentName = nameColIndex >= 0 ? String(row[nameColIndex]) : `Élève ${i}`;
     const grades: {[subject: string]: number | null} = {};
     
-    // Extract grades for each subject
     let totalGrade = 0;
     let gradeCount = 0;
     
@@ -314,7 +282,6 @@ function parseStandardGradeTable(data: any[][]): ParsedFileData {
       }
     });
     
-    // Calculate average
     const average = gradeCount > 0 ? totalGrade / gradeCount : undefined;
     
     students.push({
@@ -324,7 +291,6 @@ function parseStandardGradeTable(data: any[][]): ParsedFileData {
     });
   }
   
-  // Extract term info
   let termName = '';
   let className = '';
   
@@ -352,7 +318,6 @@ function parseStandardGradeTable(data: any[][]): ParsedFileData {
   };
 }
 
-// Parse CSV files
 export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
@@ -361,7 +326,6 @@ export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
           const csvData = results.data as any[][];
           console.log('Parsed CSV data:', csvData);
           
-          // Process the CSV data similar to Excel data
           const parsedData = processExcelData(csvData);
           resolve(parsedData);
         } catch (error) {
@@ -377,41 +341,30 @@ export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
   });
 };
 
-// Setup PDF.js worker - FIX: Use local worker instead of CDN
-// Instead of using a CDN, we'll set the worker inline to avoid network failures
 const PDFWorker = `
-  // This is a stripped-down inline worker for PDF.js
-  // It only handles basic text extraction
   self.onmessage = function(event) {
     const data = event.data;
     if (data.type === 'process') {
-      // Respond with a simple success message
-      // In a real implementation, this would process the PDF data
       self.postMessage({ type: 'processed', success: true });
     }
   };
 `;
 
-// Create blob URL for the worker
 const blob = new Blob([PDFWorker], { type: 'application/javascript' });
 const workerUrl = URL.createObjectURL(blob);
 
-// Configure PDF.js to use our worker
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
-// Parse PDF files
 export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
   try {
     console.log("Starting PDF parsing...");
     const arrayBuffer = await file.arrayBuffer();
     
-    // Load the PDF document
     console.log("Loading PDF document...");
     const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
     
     console.log(`PDF loaded with ${pdf.numPages} pages`);
     
-    // Extract text from all pages
     const textContent: string[] = [];
     const textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}> = [];
     
@@ -424,10 +377,7 @@ export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
         const itemText = item.str;
         textContent.push(itemText);
         
-        // Also store position information for table detection
         if (item.transform) {
-          // PDF.js returns transforms as a 6-element array where [0, 1, 2, 3] is the 
-          // transformation matrix and [4, 5] is the translation vector
           const x = item.transform[4];
           const y = item.transform[5];
           const height = item.height || 0;
@@ -445,25 +395,20 @@ export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
       });
     }
     
-    // Log extracted text for debugging
     console.log('Extracted PDF text content', textContent.join(' ').substring(0, 500) + '...');
     
-    // Try to detect if this is a French student bulletin
     if (isFrenchBulletin(textContent)) {
       console.log('Detected French student bulletin format');
       return parseFrenchBulletinPDF(textContent, textPositions);
     }
     
-    // If not a recognized format, try general PDF grade extraction
     return extractGradesFromPDF(textContent, textPositions);
-    
   } catch (error) {
     console.error('Error parsing PDF file:', error);
     throw new Error(`Erreur lors de l'analyse du fichier PDF: ${error}`);
   }
 };
 
-// Check if the PDF appears to be a French bulletin
 function isFrenchBulletin(textContent: string[]): boolean {
   const fullText = textContent.join(' ').toLowerCase();
   
@@ -475,15 +420,12 @@ function isFrenchBulletin(textContent: string[]): boolean {
   );
 }
 
-// Parse French bulletin PDF format
 function parseFrenchBulletinPDF(
   textContent: string[], 
   textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
 ): ParsedFileData {
-  // Join all text for easier searching
   const fullText = textContent.join(' ');
   
-  // Extract student name
   let studentName = 'Élève non identifié';
   const nameMatches = [
     /élève\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\s+\d|\s*$)/i,
@@ -500,21 +442,18 @@ function parseFrenchBulletinPDF(
     }
   }
   
-  // Extract school name
   let schoolName = '';
   const schoolMatches = fullText.match(/((Collège|Lycée|École)\s+[A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\d|\s*$)/i);
   if (schoolMatches && schoolMatches[1]) {
     schoolName = schoolMatches[1].trim();
   }
   
-  // Extract term info
   let termName = '';
   const termMatches = fullText.match(/(1er|2e|3e|premier|deuxième|troisième|1|2|3)\s*(trimestre|semestre)/i);
   if (termMatches) {
     const termNumber = termMatches[1];
     const termType = termMatches[2].toLowerCase();
     
-    // Convert to standardized format
     let num = termNumber;
     if (termNumber === 'premier') num = '1';
     if (termNumber === 'deuxième') num = '2';
@@ -524,7 +463,6 @@ function parseFrenchBulletinPDF(
     termName = `${termType.charAt(0).toUpperCase() + termType.slice(1)} ${num}`;
   }
   
-  // Extract class info
   let className = '';
   const classMatches = [
     /classe\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9\s-]+?)(\s|$)/i,
@@ -539,7 +477,6 @@ function parseFrenchBulletinPDF(
     }
   }
   
-  // Try to extract subject table data using positions
   const tableData = extractTableData(textPositions);
   if (tableData.subjects.length > 0) {
     console.log('Successfully extracted table data using positions');
@@ -562,7 +499,6 @@ function parseFrenchBulletinPDF(
     };
   }
   
-  // Fallback to regex-based extraction
   console.log('Using fallback regex-based extraction');
   const subjects: string[] = [];
   const grades: {[subject: string]: number | null} = {};
@@ -570,16 +506,13 @@ function parseFrenchBulletinPDF(
   const teachers: {[subject: string]: string} = {};
   const classAvgs: {[subject: string]: number | null} = {};
   
-  // Common French subjects
   const commonSubjects = [
     'Français', 'Mathématiques', 'Histoire', 'Géographie', 'Histoire-Géographie',
     'Anglais', 'Espagnol', 'Allemand', 'SVT', 'Physique', 'Chimie', 'Physique-Chimie',
     'EPS', 'Musique', 'Arts Plastiques', 'Technologie', 'Latin', 'Grec'
   ];
   
-  // Try to locate subjects and their grades
   commonSubjects.forEach(subject => {
-    // Look for subject followed by a number (grade)
     const subjectPattern = new RegExp(`${subject}\\s*:?\\s*(\\d+[,.]?\\d*)`, 'i');
     const match = fullText.match(subjectPattern);
     
@@ -588,21 +521,18 @@ function parseFrenchBulletinPDF(
       const grade = parseFloat(match[1].replace(',', '.'));
       grades[subject] = !isNaN(grade) ? grade : null;
       
-      // Try to find associated comment
       const commentPattern = new RegExp(`${subject}.*?appréciation\\s*:?\\s*([^.]+)`, 'i');
       const commentMatch = fullText.match(commentPattern);
       if (commentMatch && commentMatch[1]) {
         comments[subject] = commentMatch[1].trim();
       }
       
-      // Try to find associated teacher
       const teacherPattern = new RegExp(`${subject}.*?professeur\\s*:?\\s*([A-Za-zÀ-ÖØ-öø-ÿ\\s.]+?)\\s*\\d`, 'i');
       const teacherMatch = fullText.match(teacherPattern);
       if (teacherMatch && teacherMatch[1]) {
         teachers[subject] = teacherMatch[1].trim();
       }
       
-      // Try to find class average
       const avgPattern = new RegExp(`${subject}.*?moyenne de la classe\\s*:?\\s*(\\d+[,.]?\\d*)`, 'i');
       const avgMatch = fullText.match(avgPattern);
       if (avgMatch && avgMatch[1]) {
@@ -612,7 +542,6 @@ function parseFrenchBulletinPDF(
     }
   });
   
-  // Look for general average
   let average;
   const avgMatches = fullText.match(/moyenne générale\s*:?\s*(\d+[,.]?\d*)/i);
   if (avgMatches && avgMatches[1]) {
@@ -638,7 +567,6 @@ function parseFrenchBulletinPDF(
   };
 }
 
-// Extract table data using text positions
 function extractTableData(
   textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
 ) {
@@ -649,19 +577,15 @@ function extractTableData(
   const classAvgs: {[subject: string]: number | null} = {};
   let average = undefined;
   
-  // Sort positions by y-coordinate (top to bottom)
   textPositions.sort((a, b) => {
-    // First sort by page
     if (a.page !== b.page) return a.page - b.page;
-    // Then by y-coordinate on the same page
-    return b.y - a.y; // PDF coordinates have y=0 at the bottom
+    return b.y - a.y;
   });
   
-  // Group text positions by row (lines that are close in y-coordinate)
   const rows: Array<Array<{text: string, x: number, y: number}>> = [];
   let currentRow: Array<{text: string, x: number, y: number}> = [];
   let currentY = -1;
-  const yTolerance = 5; // Points of tolerance for considering lines in the same row
+  const yTolerance = 5;
   
   textPositions.forEach(pos => {
     if (currentY === -1 || Math.abs(pos.y - currentY) <= yTolerance) {
@@ -673,7 +597,6 @@ function extractTableData(
       currentY = pos.y;
     } else {
       if (currentRow.length > 0) {
-        // Sort the row by x-coordinate (left to right)
         currentRow.sort((a, b) => a.x - b.x);
         rows.push(currentRow);
       }
@@ -686,13 +609,11 @@ function extractTableData(
     }
   });
   
-  // Add the last row if it has items
   if (currentRow.length > 0) {
     currentRow.sort((a, b) => a.x - b.x);
     rows.push(currentRow);
   }
   
-  // Try to identify the header row with column names
   let headerRow = -1;
   for (let i = 0; i < rows.length; i++) {
     const rowText = rows[i].map(item => item.text.toLowerCase()).join(' ');
@@ -704,7 +625,6 @@ function extractTableData(
   }
   
   if (headerRow >= 0) {
-    // Identify column positions based on the header
     const header = rows[headerRow];
     let subjectColStart = -1;
     let gradeColStart = -1;
@@ -732,18 +652,15 @@ function extractTableData(
       }
     });
     
-    // Process data rows
     for (let i = headerRow + 1; i < rows.length; i++) {
       const row = rows[i];
       
-      // Skip rows that appear to be headers, separators or too short
       if (row.length < 2) continue;
       const rowText = row.map(item => item.text.toLowerCase()).join(' ');
       if (rowText.includes('matière') || 
           rowText.includes('moyenne générale') ||
           rowText === '') continue;
       
-      // Extract subject name
       let subject = '';
       let grade = null;
       let comment = '';
@@ -757,9 +674,7 @@ function extractTableData(
         subject = subjectItems.map(item => item.text.trim()).join(' ');
       }
       
-      // Skip rows without a subject
       if (!subject || subject.toLowerCase().includes('moyenne générale')) {
-        // Check if this row contains the student's general average
         if (rowText.includes('moyenne générale')) {
           const avgText = row.find(item => {
             const text = item.text.trim();
@@ -773,11 +688,9 @@ function extractTableData(
         continue;
       }
       
-      // Clean up subject name
-      subject = subject.replace(/^\d+\s*/, '').trim(); // Remove leading numbers
+      subject = subject.replace(/^\d+\s*/, '').trim();
       subjects.push(subject);
       
-      // Extract grade
       if (gradeColStart >= 0) {
         const gradeItems = row.filter(item => 
           Math.abs(item.x - gradeColStart) < 30
@@ -790,7 +703,6 @@ function extractTableData(
         }
       }
       
-      // Extract comment
       if (commentColStart >= 0) {
         const commentItems = row.filter(item => 
           item.x >= commentColStart && (teacherColStart < 0 || item.x < teacherColStart)
@@ -799,7 +711,6 @@ function extractTableData(
         comment = commentItems.map(item => item.text.trim()).join(' ');
       }
       
-      // Extract teacher
       if (teacherColStart >= 0) {
         const teacherItems = row.filter(item => 
           item.x >= teacherColStart && (classAvgColStart < 0 || item.x < classAvgColStart)
@@ -808,7 +719,6 @@ function extractTableData(
         teacher = teacherItems.map(item => item.text.trim()).join(' ');
       }
       
-      // Extract class average
       if (classAvgColStart >= 0) {
         const classAvgItems = row.filter(item => 
           Math.abs(item.x - classAvgColStart) < 30
@@ -821,7 +731,6 @@ function extractTableData(
         }
       }
       
-      // Store extracted data
       grades[subject] = grade;
       if (comment) comments[subject] = comment;
       if (teacher) teachers[subject] = teacher;
@@ -839,34 +748,28 @@ function extractTableData(
   };
 }
 
-// General PDF grade extraction
 function extractGradesFromPDF(
   textContent: string[], 
   textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
 ): ParsedFileData {
   const fullText = textContent.join(' ');
   
-  // Try to determine if this is a single student PDF or a class PDF
   const isSingleStudent = /élève|étudiant|bulletin/i.test(fullText) && 
                          !/liste|tableau|classe entière/i.test(fullText);
   
   if (isSingleStudent) {
-    // For single student reports
     return extractSingleStudentData(textContent, textPositions);
   } else {
-    // For class-wide reports
     return extractClassData(textContent, textPositions);
   }
 }
 
-// Extract data for a single student
 function extractSingleStudentData(
   textContent: string[], 
   textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
 ): ParsedFileData {
   const fullText = textContent.join(' ');
   
-  // Extract student name
   let studentName = '';
   const nameMatches = fullText.match(/nom\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s-]+?)(\s|$)/i);
   if (nameMatches && nameMatches[1]) {
@@ -875,12 +778,10 @@ function extractSingleStudentData(
     studentName = 'Élève non identifié';
   }
   
-  // Try to extract subjects and grades using regex patterns
   const subjects: string[] = [];
   const grades: {[subject: string]: number | null} = {};
   let average = undefined;
   
-  // Common patterns for subjects and grades in French reports
   const subjectGradePattern = /([A-Za-zÀ-ÖØ-öø-ÿ\s-]{3,})\s*:?\s*(\d+[,.]?\d*)/g;
   let match;
   
@@ -888,21 +789,18 @@ function extractSingleStudentData(
     const subject = match[1].trim();
     const grade = parseFloat(match[2].replace(',', '.'));
     
-    // Only add if it seems like a valid subject (not just a random number)
     if (subject.length > 3 && !subject.match(/^\d/) && !isNaN(grade)) {
       subjects.push(subject);
       grades[subject] = grade;
     }
   }
   
-  // Look for average
   const avgMatch = fullText.match(/moyenne\s*:?\s*(\d+[,.]?\d*)/i);
   if (avgMatch && avgMatch[1]) {
     average = parseFloat(avgMatch[1].replace(',', '.'));
     if (isNaN(average)) average = undefined;
   }
   
-  // If no subjects were found, create fallback data
   if (subjects.length === 0) {
     console.warn('No subjects found in PDF, creating fallback data');
     return createFallbackData(studentName);
@@ -922,13 +820,10 @@ function extractSingleStudentData(
   };
 }
 
-// Extract data for a class
 function extractClassData(
   textContent: string[], 
   textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
 ): ParsedFileData {
-  // Try to identify table structure in the PDF
-  // This is a simplified approach - real implementation would be more robust
   const rows = identifyTableRows(textPositions);
   
   if (rows.length === 0) {
@@ -936,7 +831,6 @@ function extractClassData(
     return createFallbackData('Classe entière');
   }
   
-  // Identify header row
   let headerRow = rows[0];
   for (let i = 0; i < Math.min(5, rows.length); i++) {
     const rowText = rows[i].map(cell => cell.text.toLowerCase()).join(' ');
@@ -946,19 +840,16 @@ function extractClassData(
     }
   }
   
-  // Try to identify columns
   const nameColIndex = headerRow.findIndex(cell => 
     cell.text.toLowerCase().includes('nom') || 
     cell.text.toLowerCase().includes('élève')
   );
   
-  // If we can't identify the name column, fall back
   if (nameColIndex === -1) {
     console.warn('Could not identify name column in table, creating fallback data');
     return createFallbackData('Classe entière');
   }
   
-  // Extract subjects from header
   const subjects: string[] = [];
   for (let i = 0; i < headerRow.length; i++) {
     if (i !== nameColIndex && 
@@ -968,7 +859,6 @@ function extractClassData(
     }
   }
   
-  // Process data rows
   const students: ParsedFileData['students'] = [];
   
   for (let i = 1; i < rows.length; i++) {
@@ -982,7 +872,6 @@ function extractClassData(
     let totalGrade = 0;
     let gradeCount = 0;
     
-    // Extract grades
     for (let j = 0; j < Math.min(subjects.length, row.length); j++) {
       const colIndex = headerRow.indexOf(headerRow.find(cell => cell.text.trim() === subjects[j]) || {text: ''});
       if (colIndex === -1 || colIndex >= row.length) continue;
@@ -999,7 +888,6 @@ function extractClassData(
       }
     }
     
-    // Calculate average
     const average = gradeCount > 0 ? totalGrade / gradeCount : undefined;
     
     students.push({
@@ -1019,16 +907,13 @@ function extractClassData(
   };
 }
 
-// Create a simple table structure from text positions
 function identifyTableRows(
   textPositions: Array<{text: string, x: number, y: number, height: number, width: number, page: number}>
 ): Array<Array<{text: string, x: number, y: number}>> {
-  // Group positions by y-coordinate (rows)
   const yGroups: Record<number, Array<{text: string, x: number, y: number}>> = {};
-  const yTolerance = 5; // Tolerance for considering positions to be on the same line
+  const yTolerance = 5;
   
   textPositions.forEach(pos => {
-    // Round y-coordinate to group nearby positions
     const roundedY = Math.round(pos.y / yTolerance) * yTolerance;
     
     if (!yGroups[roundedY]) {
@@ -1042,14 +927,11 @@ function identifyTableRows(
     });
   });
   
-  // Sort groups by y-coordinate (top to bottom)
-  const sortedYs = Object.keys(yGroups).map(Number).sort((a, b) => b - a); // Sort in descending order (PDF coords)
+  const sortedYs = Object.keys(yGroups).map(Number).sort((a, b) => b - a);
   
-  // Convert groups to rows
   const rows: Array<Array<{text: string, x: number, y: number}>> = [];
   
   sortedYs.forEach(y => {
-    // Sort positions within row by x-coordinate (left to right)
     const sortedRow = yGroups[y].sort((a, b) => a.x - b.x);
     rows.push(sortedRow);
   });
@@ -1057,7 +939,6 @@ function identifyTableRows(
   return rows;
 }
 
-// Create fallback data when extraction fails
 function createFallbackData(namePrefix: string): ParsedFileData {
   console.warn('Creating fallback data for PDF parsing');
   
@@ -1066,7 +947,6 @@ function createFallbackData(namePrefix: string): ParsedFileData {
     'SVT', 'Physique-Chimie', 'EPS'
   ];
   
-  // Create a student with random grades
   const student = {
     name: `${namePrefix} (Données simulées)`,
     grades: {} as {[subject: string]: number},
@@ -1076,7 +956,6 @@ function createFallbackData(namePrefix: string): ParsedFileData {
   let total = 0;
   
   fallbackSubjects.forEach(subject => {
-    // Random grade between 8 and 16
     const grade = Math.round((8 + Math.random() * 8) * 2) / 2;
     student.grades[subject] = grade;
     total += grade;
@@ -1098,7 +977,6 @@ function createFallbackData(namePrefix: string): ParsedFileData {
   };
 }
 
-// Parse bulletin text to extract structured data
 export function parseBulletin(text: string): BulletinData {
   const data: BulletinData = {
     nom: '',
@@ -1108,7 +986,6 @@ export function parseBulletin(text: string): BulletinData {
     appreciation: ''
   };
 
-  // Extraction du nom (exemple : "Bulletin du 2ème Trimestre [NOM PRÉNOM]")
   const nomMatch = text.match(/Bulletin du 2ème Trimestre\s+([A-ZÉÈÊÀÂÙÎÔÇ][a-zéèêàâùîôç]+\s+[A-ZÉÈÊÀÂÙÎÔÇ][a-zéèêàâùîôç]+)/) || 
                    text.match(/Nom\s*:?\s*(.*)/i) || 
                    text.match(/Élève\s*:?\s*(.*)/i);
@@ -1116,14 +993,12 @@ export function parseBulletin(text: string): BulletinData {
     data.nom = nomMatch[1].trim();
   }
 
-  // Extraction de la classe
   const classeMatch = text.match(/Classe\s*:?\s*(\S+)/i) || 
                       text.match(/classe\s*:?\s*(.+?)(\s|\.|$)/i);
   if (classeMatch) {
     data.classe = classeMatch[1].trim();
   }
 
-  // Extraction de la moyenne générale
   const moyenneGenMatch = text.match(/Moyennes générales\s+([\d.,]+)/i) || 
                           text.match(/Moyenne générale\s*:?\s*([\d.,]+)/i) || 
                           text.match(/Moyenne de l['']élève\s*:?\s*([\d.,]+)/i);
@@ -1131,27 +1006,21 @@ export function parseBulletin(text: string): BulletinData {
     data.moyenne_generale = parseFloat(moyenneGenMatch[1].replace(',', '.'));
   }
 
-  // Extraction des moyennes par matière
-  // On recherche des lignes du type "MATHEMATIQUES ... 9,15 ..."
   const subjectRegex = /([A-ZÉÈÊÀÂÙÎÔÇ][A-ZÉÈÊÀÂÙÎÔÇ\s-]+)\s+[\w\.\s-]*\s+([\d.,]+)/gi;
   const simpleSubjectRegex = /([A-Za-zÀ-ÖØ-öø-ÿéèêàâùîôç -]+)\s*:\s*([\d.,]+)/gi;
   
-  // Try first with the specialized format
   let match;
   while ((match = subjectRegex.exec(text)) !== null) {
     const subject = match[1].trim();
-    // Exclude headers that are not subjects
     if (!subject.match(/BULLETIN|MOYENNES|NOM|CLASSE/i)) {
       data.matieres[subject] = parseFloat(match[2].replace(',', '.'));
     }
   }
   
-  // If no subjects found, try with the simpler format
   if (Object.keys(data.matieres).length === 0) {
     let simpleMatch;
     while ((simpleMatch = simpleSubjectRegex.exec(text)) !== null) {
       const label = simpleMatch[1].trim().toLowerCase();
-      // Avoid re-injecting already extracted data
       if (!label.includes('nom') && 
           !label.includes('classe') && 
           !label.includes('moyenne') && 
@@ -1162,7 +1031,6 @@ export function parseBulletin(text: string): BulletinData {
     }
   }
 
-  // Extraction de l'appréciation
   const appreciationMatch = text.match(/(Ensemble[^.]+\.)/i) || 
                            text.match(/Appréciation\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is) ||
                            text.match(/Appréciation générale\s*:?\s*(.*?)(\n\n|\n[A-Z]|$)/is);
@@ -1173,52 +1041,40 @@ export function parseBulletin(text: string): BulletinData {
   return data;
 }
 
-/**
- * Fonction permettant de parser l'intégralité du PDF contenant plusieurs bulletins.
- */
 export function parseMultiBulletins(text: string): BulletinData[] {
   console.log("Parsing multiple bulletins from text:", text.substring(0, 500) + "...");
   
-  // On découpe le texte par le séparateur unique de chaque bulletin.
-  // Ici, on suppose que chaque bulletin commence par "Bulletin du 2ème Trimestre"
   const bulletinSeparator = "Bulletin du 2ème Trimestre";
   
-  // Split the text by the separator, but keep track of the separator
   const segments = text.split(new RegExp(`(${bulletinSeparator})`, 'i')).filter(segment => segment.trim().length > 0);
   console.log(`Found ${segments.length} segments`);
   
-  // Reconstruct the segments properly
   const bulletinSegments: string[] = [];
   let currentSegment = "";
   
   for (const segment of segments) {
     if (segment.trim() === bulletinSeparator) {
-      // Start a new segment
       if (currentSegment) {
         bulletinSegments.push(currentSegment);
       }
       currentSegment = bulletinSeparator;
     } else {
-      // Continue the current segment
       currentSegment += segment;
     }
   }
   
-  // Add the last segment
   if (currentSegment) {
     bulletinSegments.push(currentSegment);
   }
   
   console.log(`Reconstructed ${bulletinSegments.length} bulletin segments`);
   
-  // Parse each bulletin segment
   const bulletins: BulletinData[] = [];
   
   for (let i = 0; i < bulletinSegments.length; i++) {
     try {
       const bulletin = parseBulletin(bulletinSegments[i]);
       
-      // Verify the bulletin has enough data to be considered valid
       if (bulletin.nom || bulletin.classe || Object.keys(bulletin.matieres).length > 0) {
         bulletins.push(bulletin);
         console.log(`Successfully parsed bulletin ${i+1}: ${bulletin.nom}`);
