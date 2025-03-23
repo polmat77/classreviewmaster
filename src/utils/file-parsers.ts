@@ -934,9 +934,10 @@ function identifyTableRows(
   sortedYs.forEach(y => {
     // Make sure all items have the required properties
     const rowItems = yGroups[y].filter(item => 
+      item !== undefined && 
+      typeof item.text === 'string' && 
       typeof item.x === 'number' && 
-      typeof item.y === 'number' && 
-      typeof item.text === 'string'
+      typeof item.y === 'number'
     );
     
     if (rowItems.length > 0) {
@@ -1099,3 +1100,4 @@ export function parseMultiBulletins(text: string): BulletinData[] {
   console.log(`Successfully parsed ${bulletins.length} bulletins`);
   return bulletins;
 }
+
