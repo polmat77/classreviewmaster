@@ -1,3 +1,4 @@
+
 import * as XLSX from 'xlsx';
 import * as Papa from 'papaparse';
 import * as pdfjs from 'pdfjs-dist';
@@ -932,8 +933,17 @@ function identifyTableRows(
   const rows: Array<Array<{text: string, x: number, y: number}>> = [];
   
   sortedYs.forEach(y => {
-    const sortedRow = yGroups[y].sort((a, b) => a.x - b.x);
-    rows.push(sortedRow);
+    // Make sure all items have the required properties
+    const rowItems = yGroups[y].filter(item => 
+      typeof item.x === 'number' && 
+      typeof item.y === 'number' && 
+      typeof item.text === 'string'
+    );
+    
+    if (rowItems.length > 0) {
+      const sortedRow = rowItems.sort((a, b) => a.x - b.x);
+      rows.push(sortedRow);
+    }
   });
   
   return rows;
