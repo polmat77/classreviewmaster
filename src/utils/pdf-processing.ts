@@ -1,6 +1,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import { toast } from 'sonner';
 import { OpenAIService } from './openai-service';
+import { extractTextFromPDF, validatePdfFile } from './pdf-service';
 
 // Interfaces for structured output
 export interface StudentGrades {
@@ -36,20 +37,53 @@ export interface ClassBulletinResult {
 }
 
 /**
- * Parse a class grade table PDF to extract structured data
+ * Parse a class grade table PDF to extract structured data with progress tracking
  * @param pdfBuffer The PDF file buffer
+ * @param onProgress Optional callback for progress updates
  * @returns Structured table data with students, grades, and subjects
  */
-export async function parseGradeTable(pdfBuffer: ArrayBuffer): Promise<GradeTableResult> {
+export async function parseGradeTable(
+  pdfBuffer: ArrayBuffer, 
+  onProgress?: (progress: number) => void
+): Promise<GradeTableResult> {
   try {
+    console.time("Grade Table Parsing");
     console.log("Parsing grade table PDF...");
+    
+    // Track overall progress
+    let overallProgress = 0;
+    const updateProgress = (step: number, total: number = 100) => {
+      if (onProgress) {
+        // Calculate weighted progress (PDF loading: 40%, table processing: 60%)
+        const weightedProgress = Math.min(Math.round((step / total) * 60) + overallProgress, 100);
+        onProgress(weightedProgress);
+      }
+    };
+    
+    if (onProgress) {
+      onProgress(0); // Start progress at 0
+    }
     
     // Load PDF with pdfjs
     const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
+    console.log(`PDF loaded with ${pdf.numPages} pages`);
+    
+    // Set PDF loading complete (40% of total progress)
+    overallProgress = 40;
+    if (onProgress) {
+      onProgress(overallProgress);
+    }
+    
     const textItems: Array<{ text: string; x: number; y: number; page: number }> = [];
+    const totalPages = pdf.numPages;
 
     // Extract text with coordinates from all pages
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      // Only log every few pages for large documents
+      if (pageNum === 1 || pageNum === totalPages || pageNum % 5 === 0) {
+        console.log(`Processing page ${pageNum} of ${totalPages}`);
+      }
+      
       const page = await pdf.getPage(pageNum);
       const content = await page.getTextContent();
       content.items.forEach((item: any) => {
@@ -63,6 +97,9 @@ export async function parseGradeTable(pdfBuffer: ArrayBuffer): Promise<GradeTabl
           });
         }
       });
+      
+      // Update progress during page processing
+      updateProgress(pageNum, totalPages);
     }
 
     console.log(`Extracted ${textItems.length} text items from PDF`);
@@ -107,7 +144,7 @@ export async function parseGradeTable(pdfBuffer: ArrayBuffer): Promise<GradeTabl
     }
     
     if (header.length === 0) {
-      throw new Error("Unable to find header row in grade table PDF.");
+      throw new Error("Impossible de trouver l'en-tête du tableau dans ce PDF.");
     }
 
     // Determine index of the name column and subject columns
@@ -116,7 +153,7 @@ export async function parseGradeTable(pdfBuffer: ArrayBuffer): Promise<GradeTabl
     );
     
     if (nameColIndex === -1) {
-      throw new Error("Unable to identify student name column in table.");
+      throw new Error("Impossible d'identifier la colonne du nom dans le tableau.");
     }
     
     const subjects: string[] = [];
@@ -193,6 +230,12 @@ export async function parseGradeTable(pdfBuffer: ArrayBuffer): Promise<GradeTabl
       }
     }
 
+    console.timeEnd("Grade Table Parsing");
+    
+    if (onProgress) {
+      onProgress(100); // Parsing complete
+    }
+    
     return {
       className,
       subjects,
@@ -205,13 +248,20 @@ export async function parseGradeTable(pdfBuffer: ArrayBuffer): Promise<GradeTabl
 }
 
 /**
- * Split bulletin text into individual student bulletins
+ * Split bulletin text into individual student bulletins more efficiently
  */
 function splitBulletins(fullText: string): string[] {
-  const anchor = /Bulletin du [0-9ᵉ]{1,3}(?:er|ème|e|nd)? ?(?:Trimestre|Semestre)/i;  // Regex for "Bulletin du ... Trimestre/Semestre"
+  console.time("Bulletin Splitting");
+  
+  // Optimized regex for bulletin detection
+  const anchor = /Bulletin du [0-9ᵉ]{1,3}(?:er|ème|e|nd)? ?(?:Trimestre|Semestre)/i;
   const parts: string[] = [];
   let current: string[] = [];
   const lines = fullText.split(/\r?\n/);
+  
+  // Estimate total for progress reporting
+  const estimatedBulletinCount = Math.max(1, Math.floor(lines.length / 50));
+  console.log(`Estimated number of bulletins: ~${estimatedBulletinCount} (${lines.length} lines)`);
   
   for (const line of lines) {
     if (anchor.test(line)) {
@@ -229,44 +279,98 @@ function splitBulletins(fullText: string): string[] {
     parts.push(current.join("\n"));
   }
   
+  console.timeEnd("Bulletin Splitting");
+  console.log(`Split into ${parts.length} individual bulletins`);
+  
   return parts;
 }
 
 /**
- * Parse a PDF containing multiple student bulletins
+ * Parse a PDF containing multiple student bulletins with progress tracking
  * @param pdfBuffer The PDF file buffer
+ * @param onProgress Optional callback for progress updates
  * @returns Structured data with student bulletins and class summary
  */
-export async function parseClassBulletins(pdfBuffer: ArrayBuffer): Promise<ClassBulletinResult> {
+export async function parseClassBulletins(
+  pdfBuffer: ArrayBuffer,
+  onProgress?: (progress: number) => void
+): Promise<ClassBulletinResult> {
   try {
+    console.time("Class Bulletins Parsing");
     console.log("Parsing class bulletins PDF...");
+    
+    if (onProgress) {
+      onProgress(0); // Start progress at 0
+    }
     
     // Extract all text from PDF using pdfjs for better handling
     const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
+    console.log(`PDF loaded with ${pdf.numPages} pages`);
+    
+    if (onProgress) {
+      onProgress(10); // PDF document loaded
+    }
+    
+    // Process in batches to avoid memory issues with large documents
+    const batchSize = 5; // Process 5 pages at a time
     const fullTextArray: string[] = [];
     
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    for (let batchStart = 1; batchStart <= pdf.numPages; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize - 1, pdf.numPages);
+      console.log(`Processing pages ${batchStart} to ${batchEnd}`);
+      
+      const batchPromises = [];
+      for (let pageNum = batchStart; pageNum <= batchEnd; pageNum++) {
+        batchPromises.push(extractPageText(pdf, pageNum));
+      }
+      
+      const batchTexts = await Promise.all(batchPromises);
+      fullTextArray.push(...batchTexts);
+      
+      // Update progress during page processing (40% of total for this stage)
+      if (onProgress) {
+        const progressValue = Math.min(10 + Math.round((batchEnd / pdf.numPages) * 40), 50);
+        onProgress(progressValue);
+      }
+    }
+    
+    async function extractPageText(pdf: any, pageNum: number): Promise<string> {
       const page = await pdf.getPage(pageNum);
-      const content = await page.getTextContent();
+      const content = await page.getTextContent({
+        normalizeWhitespace: true
+      });
       const pageText = content.items.map((item: any) => item.str || '').join(' ');
-      fullTextArray.push(pageText);
+      return pageText;
     }
     
     const fullText = fullTextArray.join('\n');
+    
+    // Update progress: text extraction complete
+    if (onProgress) {
+      onProgress(50);
+    }
     
     // Split into individual bulletin texts
     const bulletinTexts = splitBulletins(fullText);
     console.log(`Identified ${bulletinTexts.length} individual student bulletins`);
     
+    // Update progress: split complete
+    if (onProgress) {
+      onProgress(60);
+    }
+    
     const students: StudentBulletin[] = [];
     const allRemarks: string[] = [];
-
-    for (const bulletinText of bulletinTexts) {
-      // Extract student name and class
+    
+    // Process each bulletin with progress updates
+    for (let i = 0; i < bulletinTexts.length; i++) {
+      const bulletinText = bulletinTexts[i];
+      
+      // Process individual bulletin (extract student name, class, etc.)
       const nameMatch = bulletinText.match(/(?:Nom|Élève)\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i) || 
                         bulletinText.match(/Bulletin[^:]*?:\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i);
       
-      const classMatch = bulletinText.match(/Classe\s*:?\s*([\wÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i);
+      const classMatch = bulletinText.match(/Classe\s*:?\s*([\wÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$)/i);
       
       const studentName = nameMatch ? nameMatch[1].trim() : "Élève Inconnu";
       const className = classMatch ? classMatch[1].trim() : "Classe Inconnue";
@@ -338,6 +442,10 @@ export async function parseClassBulletins(pdfBuffer: ArrayBuffer): Promise<Class
     if (allRemarks.length > 0) {
       console.log(`Generating class summary based on ${allRemarks.length} subject remarks`);
       
+      if (onProgress) {
+        onProgress(95); // Summary generation in progress
+      }
+      
       try {
         // Prepare prompt for OpenAI
         const prompt = `Vous êtes un professeur principal qui doit rédiger une synthèse pour le conseil de classe.
@@ -361,7 +469,13 @@ Synthèse pour la classe:`;
     } else {
       classSummary = "Pas suffisamment de données pour générer une synthèse de classe.";
     }
-
+    
+    console.timeEnd("Class Bulletins Parsing");
+    
+    if (onProgress) {
+      onProgress(100); // Processing complete
+    }
+    
     return { students, classSummary };
   } catch (error) {
     console.error('Error parsing class bulletins:', error);
@@ -419,26 +533,53 @@ Appréciation globale de l'élève:`;
 }
 
 /**
- * Process a single student bulletin PDF
+ * Process a single student bulletin PDF with progress tracking
  * @param pdfBuffer The PDF file buffer
+ * @param onProgress Optional callback for progress updates
  * @returns A generated appreciation paragraph
  */
-export async function summarizeStudentBulletin(pdfBuffer: ArrayBuffer): Promise<string> {
+export async function summarizeStudentBulletin(
+  pdfBuffer: ArrayBuffer,
+  onProgress?: (progress: number) => void
+): Promise<string> {
   try {
+    console.time("Student Bulletin Processing");
     console.log("Processing individual student bulletin...");
     
-    // Parse the PDF using the same logic as parseClassBulletins
-    const { students } = await parseClassBulletins(pdfBuffer);
+    if (onProgress) {
+      onProgress(0); // Start progress at 0
+    }
+    
+    // Parse the PDF using the same logic as parseClassBulletins but with progress tracking
+    const { students } = await parseClassBulletins(pdfBuffer, (progress) => {
+      // Map the bulletin parsing progress to 80% of our total progress
+      if (onProgress) {
+        onProgress(Math.round(progress * 0.8));
+      }
+    });
     
     if (!students || students.length === 0) {
       throw new Error("Aucun bulletin étudiant n'a été trouvé dans le PDF.");
+    }
+    
+    if (onProgress) {
+      onProgress(80); // Bulletin parsing complete
     }
     
     // We assume the first student is the target (since it's a single bulletin PDF)
     const student = students[0];
     
     // Generate a summary for this student
-    return await generateStudentSummary(student);
+    console.log(`Generating summary for student: ${student.name}`);
+    const summary = await generateStudentSummary(student);
+    
+    console.timeEnd("Student Bulletin Processing");
+    
+    if (onProgress) {
+      onProgress(100); // Processing complete
+    }
+    
+    return summary;
   } catch (error) {
     console.error('Error processing student bulletin:', error);
     throw new Error(`Erreur lors du traitement du bulletin: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
