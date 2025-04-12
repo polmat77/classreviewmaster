@@ -1,6 +1,7 @@
 
 import { ApiKeyService } from './api-key-service';
 import { AppreciationService } from './appreciation-service';
+import { TextGenerationService } from './text-generation-service';
 
 // Re-export functionality from the separate modules
 export const OpenAIService = {
@@ -15,4 +16,7 @@ export const OpenAIService = {
   // Appreciation generation
   generateClassAppreciation: AppreciationService.generateClassAppreciation,
   generateStudentAppreciation: AppreciationService.generateStudentAppreciation,
+  
+  // Text generation
+  generateText: TextGenerationService.generateText
 };
