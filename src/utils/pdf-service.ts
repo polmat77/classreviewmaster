@@ -166,8 +166,11 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
     
-    // Check for encryption
-    if (pdf.encrypted) {
+    // Check for encryption - Modified to use metadata instead of direct property
+    const metadata = await pdf.getMetadata().catch(() => ({ info: {} }));
+    const isEncrypted = metadata.info && (metadata.info as any).IsEncrypted;
+    
+    if (isEncrypted) {
       return { 
         isValid: false, 
         reason: "Le fichier PDF est protégé par mot de passe ou chiffré. Veuillez fournir une version non protégée." 

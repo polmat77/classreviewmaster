@@ -4,8 +4,8 @@ import { toast } from 'sonner';
 // OpenAI API endpoints
 const API_URL = 'https://api.openai.com/v1/chat/completions';
 
-// API key provided by the admin
-const FIXED_API_KEY = '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';
+// localStorage key for storing the API key
+const API_KEY_STORAGE_KEY = 'openai_api_key';
 
 // Types for the OpenAI API
 interface OpenAIMessage {
@@ -30,26 +30,52 @@ interface OpenAIResponse {
 
 export const OpenAIService = {
   /**
-   * Check if API is available
+   * Get API key from localStorage
    */
-  isApiAvailable(): boolean {
-    return !!FIXED_API_KEY;
+  getApiKey(): string | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return localStorage.getItem(API_KEY_STORAGE_KEY);
+  },
+
+  /**
+   * Validate if API key format is correct
+   */
+  isValidApiKeyFormat(key: string): boolean {
+    return key.startsWith('sk-') && key.length > 30;
   },
 
   /**
    * Check if API key is available
    */
   hasApiKey(): boolean {
-    return this.isApiAvailable();
+    return !!this.getApiKey();
   },
 
   /**
-   * Save API key
+   * Save API key to localStorage
    */
   saveApiKey(key: string): void {
-    // This function is a no-op since we're using a fixed API key
-    // But we keep it to maintain compatibility with existing code
-    console.log('Using fixed API key provided by administrator');
+    if (!this.isValidApiKeyFormat(key)) {
+      throw new Error('Format de clé API invalide');
+    }
+    
+    try {
+      localStorage.setItem(API_KEY_STORAGE_KEY, key);
+      console.log('API key saved to localStorage');
+    } catch (error) {
+      console.error('Error saving API key to localStorage:', error);
+      throw new Error('Erreur lors de l\'enregistrement de la clé API');
+    }
+  },
+
+  /**
+   * Clear API key from localStorage
+   */
+  clearApiKey(): void {
+    localStorage.removeItem(API_KEY_STORAGE_KEY);
+    console.log('API key removed from localStorage');
   },
 
   /**
@@ -60,8 +86,9 @@ export const OpenAIService = {
     tone: string, 
     length: number
   ): Promise<string> {
-    if (!this.isApiAvailable()) {
-      throw new Error('API key not configured by administrator');
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('Clé API non configurée');
     }
 
     const toneMap: Record<string, string> = {
@@ -120,8 +147,9 @@ export const OpenAIService = {
     tone: string,
     length: number
   ): Promise<string> {
-    if (!this.isApiAvailable()) {
-      throw new Error('API key not configured by administrator');
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('Clé API non configurée');
     }
 
     const toneMap: Record<string, string> = {
@@ -166,8 +194,9 @@ export const OpenAIService = {
    */
   async generateText(prompt: string, model: string = 'gpt-4o-mini'): Promise<string> {
     try {
-      if (!this.isApiAvailable()) {
-        throw new Error('API key not configured by administrator');
+      const apiKey = this.getApiKey();
+      if (!apiKey) {
+        throw new Error('Clé API non configurée');
       }
 
       const messages: OpenAIMessage[] = [
@@ -185,7 +214,7 @@ export const OpenAIService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${FIXED_API_KEY}`
+          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
           model,
@@ -206,6 +235,41 @@ export const OpenAIService = {
       console.error('Erreur lors de la génération de texte:', error);
       toast.error(error instanceof Error ? error.message : 'Erreur avec l\'API OpenAI');
       throw error;
+    }
+  },
+
+  /**
+   * Test the API key
+   */
+  async testApiKey(key: string): Promise<boolean> {
+    try {
+      // Make a minimal API call to test the key
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'user',
+              content: 'Test de connexion'
+            }
+          ],
+          max_tokens: 5
+        })
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error testing API key:', error);
+      return false;
     }
   }
 };

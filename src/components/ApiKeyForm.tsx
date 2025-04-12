@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { OpenAIService } from '@/utils/openai-service';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { KeyRound, Save, Lock } from 'lucide-react';
+import { KeyRound, Save, Lock, RefreshCw, Check, X } from 'lucide-react';
 
 interface ApiKeyFormProps {
   onApiKeySubmitted?: () => void;
@@ -16,15 +16,18 @@ const ApiKeyForm: React.FC<ApiKeyFormProps> = ({ onApiKeySubmitted, className })
   const [apiKey, setApiKey] = useState('');
   const [isKeySet, setIsKeySet] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [keyStatus, setKeyStatus] = useState<'untested' | 'valid' | 'invalid'>('untested');
 
   useEffect(() => {
-    // Check if API key is already stored
+    // Check if API key is already stored in localStorage
     const hasKey = OpenAIService.hasApiKey();
     setIsKeySet(hasKey);
     
     // If key exists, mask it in the input
     if (hasKey) {
       setApiKey('••••••••••••••••••••••••••');
+      setKeyStatus('valid'); // Assume valid since it was previously saved
     }
   }, []);
 
@@ -46,9 +49,22 @@ const ApiKeyForm: React.FC<ApiKeyFormProps> = ({ onApiKeySubmitted, className })
         return;
       }
       
+      // Test the API key before saving
+      setIsTesting(true);
+      const isValid = await OpenAIService.testApiKey(apiKey);
+      setIsTesting(false);
+
+      if (!isValid) {
+        toast.error('La clé API fournie est invalide ou a expiré');
+        setKeyStatus('invalid');
+        setIsSubmitting(false);
+        return;
+      }
+      
       // Save the API key
       OpenAIService.saveApiKey(apiKey);
       setIsKeySet(true);
+      setKeyStatus('valid');
       toast.success('Clé API OpenAI enregistrée avec succès');
       
       // Call the callback if provided
@@ -58,9 +74,27 @@ const ApiKeyForm: React.FC<ApiKeyFormProps> = ({ onApiKeySubmitted, className })
     } catch (error) {
       console.error('Error saving API key:', error);
       toast.error('Erreur lors de l\'enregistrement de la clé API');
+      setKeyStatus('invalid');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleClearKey = () => {
+    OpenAIService.clearApiKey();
+    setApiKey('');
+    setIsKeySet(false);
+    setKeyStatus('untested');
+    toast.info('Clé API supprimée');
+  };
+
+  const getStatusIcon = () => {
+    if (keyStatus === 'valid') {
+      return <Check className="h-4 w-4 text-green-500" />;
+    } else if (keyStatus === 'invalid') {
+      return <X className="h-4 w-4 text-red-500" />;
+    }
+    return null;
   };
 
   return (
@@ -84,33 +118,57 @@ const ApiKeyForm: React.FC<ApiKeyFormProps> = ({ onApiKeySubmitted, className })
                 type="password"
                 placeholder="sk-..."
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="pl-9"
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  if (keyStatus !== 'untested') {
+                    setKeyStatus('untested');
+                  }
+                }}
+                className="pl-9 pr-9"
                 required
               />
+              {getStatusIcon() && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {getStatusIcon()}
+                </div>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Votre clé API est stockée uniquement sur votre appareil et n'est jamais partagée.
               {!isKeySet && " Obtenez votre clé sur la plateforme OpenAI."}
             </p>
           </div>
-          <Button 
-            type="submit" 
-            disabled={isSubmitting} 
-            className="w-full"
-          >
-            {isSubmitting ? (
-              <>
-                <span className="animate-spin mr-2">⌛</span>
-                Enregistrement...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                {isKeySet ? 'Mettre à jour la clé API' : 'Enregistrer la clé API'}
-              </>
+
+          <div className="flex space-x-2">
+            <Button 
+              type="submit" 
+              disabled={isSubmitting || isTesting} 
+              className="flex-1"
+            >
+              {isSubmitting || isTesting ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  {isTesting ? 'Test en cours...' : 'Enregistrement...'}
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  {isKeySet ? 'Mettre à jour la clé API' : 'Enregistrer la clé API'}
+                </>
+              )}
+            </Button>
+
+            {isKeySet && (
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleClearKey}
+                disabled={isSubmitting || isTesting}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             )}
-          </Button>
+          </div>
         </form>
       </CardContent>
       <CardFooter className="pt-0 flex flex-col items-start">
