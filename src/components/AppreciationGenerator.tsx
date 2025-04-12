@@ -48,9 +48,9 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   
   // Check if API is available on component mount
   useEffect(() => {
-    setIsApiAvailable(OpenAIService.isApiAvailable());
+    setIsApiAvailable(OpenAIService.hasApiKey());
     
-    if (!OpenAIService.isApiAvailable()) {
+    if (!OpenAIService.hasApiKey()) {
       toast.error("L'API n'est pas configurée par l'administrateur", {
         duration: 5000,
       });
