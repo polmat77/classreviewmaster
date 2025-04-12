@@ -3,9 +3,10 @@ import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import StepIndicator from './StepIndicator';
-import { ChevronLeft, ChevronRight, GraduationCap, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useIsMobile } from '@/hooks/use-mobile';
+import Logo from './Logo';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -37,12 +38,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="app-container flex justify-between items-center h-16">
           <Link 
             to="/" 
-            className="flex items-center space-x-2 text-xl font-medium transition-opacity hover:opacity-80"
+            className="flex items-center space-x-2 transition-opacity hover:opacity-80"
           >
-            <span className="bg-primary text-primary-foreground p-1 rounded flex items-center justify-center">
-              <GraduationCap className="h-5 w-5" />
-            </span>
-            <span className="hidden sm:inline-block">ClassReviewMaster</span>
+            <Logo />
           </Link>
           
           <div className="flex items-center space-x-4">
