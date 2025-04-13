@@ -25,14 +25,14 @@ const Logo: React.FC<LogoProps> = ({ className, showText = true, size = 'md' }) 
     <div className={cn("flex items-center space-x-2", className)}>
       <div className={cn("relative", logoSizes[size])}>
         <img 
-          src="/lovable-uploads/c7f2e68f-592f-4074-8dcd-f18f79f849b2.png"
+          src="/lovable-uploads/6853d6c2-6c7b-49a4-b0d4-1659fc9c01c5.png"
           alt="ClassReviewMaster Logo"
           className="w-full h-full object-contain"
         />
       </div>
       
       {showText && (
-        <span className={cn("font-medium tracking-tight text-primary-foreground", textSizes[size])}>
+        <span className={cn("font-medium tracking-tight", textSizes[size])}>
           ClassReviewMaster
         </span>
       )}
