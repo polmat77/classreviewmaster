@@ -1,57 +1,42 @@
 
 import { toast } from 'sonner';
-import { ApiKeyService } from './api-key-service';
 import { OpenAIMessage, OpenAIRequest, OpenAIResponse } from './openai-types';
 
-// OpenAI API endpoint
-const API_URL = 'https://api.openai.com/v1/chat/completions';
+// URL de l'Edge Function Supabase
+const EDGE_FUNCTION_URL = import.meta.env.DEV 
+  ? 'http://localhost:54321/functions/v1/openai-proxy'
+  : 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co/functions/v1/openai-proxy';
 
 export const TextGenerationService = {
   /**
-   * Generate text using OpenAI API
+   * Generate text using OpenAI API via our secure proxy
    */
   async generateText(prompt: string, model: string = 'gpt-4o-mini'): Promise<string> {
     try {
-      const apiKey = ApiKeyService.getApiKey();
-      if (!apiKey) {
-        throw new Error('Clé API non configurée');
-      }
-
-      const messages: OpenAIMessage[] = [
-        {
-          role: 'system',
-          content: 'Vous êtes un professeur principal français expérimenté qui rédige des appréciations scolaires précises et professionnelles.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ];
-
-      const response = await fetch(API_URL, {
+      const response = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
+          prompt,
           model,
-          messages,
+          systemMessage: 'Vous êtes un professeur principal français expérimenté qui rédige des appréciations scolaires précises et professionnelles.',
           temperature: 0.7,
-          max_tokens: 1000
-        } as OpenAIRequest)
+          maxTokens: 1000
+        })
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error?.message || 'Erreur avec l\'API OpenAI');
+        throw new Error(error.error || 'Erreur avec le service de génération de texte');
       }
 
-      const data = await response.json() as OpenAIResponse;
-      return data.choices[0].message.content.trim();
+      const data = await response.json();
+      return data.text;
     } catch (error) {
       console.error('Erreur lors de la génération de texte:', error);
-      toast.error(error instanceof Error ? error.message : 'Erreur avec l\'API OpenAI');
+      toast.error(error instanceof Error ? error.message : 'Erreur avec le service de génération de texte');
       throw error;
     }
   }

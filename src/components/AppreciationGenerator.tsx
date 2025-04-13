@@ -4,13 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, RefreshCw, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -44,18 +37,6 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   const [appreciation, setAppreciation] = useState('');
   const [progressValue, setProgressValue] = useState('0');
   const [copied, setCopied] = useState(false);
-  const [isApiAvailable, setIsApiAvailable] = useState(false);
-  
-  // Check if API is available on component mount
-  useEffect(() => {
-    setIsApiAvailable(OpenAIService.hasApiKey());
-    
-    if (!OpenAIService.hasApiKey()) {
-      toast.error("L'API n'est pas configurée par l'administrateur", {
-        duration: 5000,
-      });
-    }
-  }, []);
   
   // Reset progress when starting generation
   useEffect(() => {
@@ -76,11 +57,6 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   }, [isGenerating, progressValue]);
   
   const generateAppreciation = async () => {
-    if (!isApiAvailable) {
-      toast.error("L'API n'est pas configurée par l'administrateur");
-      return;
-    }
-
     // Check if we have analysis data
     if (!analysisData && !studentData && !classData) {
       toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer et analyser des fichiers.");
@@ -211,7 +187,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
             
             <Button 
               onClick={generateAppreciation} 
-              disabled={isGenerating || !isApiAvailable}
+              disabled={isGenerating}
               className="w-full"
             >
               {isGenerating ? (
