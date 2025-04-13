@@ -25,7 +25,7 @@ const Logo: React.FC<LogoProps> = ({ className, showText = true, size = 'md' }) 
     <div className={cn("flex items-center space-x-2", className)}>
       <div className={cn("relative", logoSizes[size])}>
         <img 
-          src="/lovable-uploads/6853d6c2-6c7b-49a4-b0d4-1659fc9c01c5.png"
+          src="/lovable-uploads/b6023dae-14a9-4284-a657-bdd5298b7835.png"
           alt="ClassReviewMaster Logo"
           className="w-full h-full object-contain"
         />
