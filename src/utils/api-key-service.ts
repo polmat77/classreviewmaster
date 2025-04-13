@@ -1,85 +1,47 @@
 
-// API key management service
-const API_KEY_STORAGE_KEY = 'openai_api_key';
+// API key management service - Obsolète, maintenu pour compatibilité
+// La clé API est maintenant gérée côté serveur via Supabase Edge Function
 
 export const ApiKeyService = {
   /**
-   * Get API key from localStorage
+   * Vérifie si une clé API est disponible (toujours true avec la nouvelle architecture)
    */
-  getApiKey(): string | null {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-    return localStorage.getItem(API_KEY_STORAGE_KEY);
+  getApiKey(): string {
+    return "server_managed_key";
   },
 
   /**
-   * Validate if API key format is correct
+   * Vérifie si le format de la clé API est valide (toujours true avec la nouvelle architecture)
    */
-  isValidApiKeyFormat(key: string): boolean {
-    return key.startsWith('sk-') && key.length > 30;
+  isValidApiKeyFormat(): boolean {
+    return true;
   },
 
   /**
-   * Check if API key is available
+   * Vérifie si une clé API est disponible (toujours true avec la nouvelle architecture)
    */
   hasApiKey(): boolean {
-    return !!this.getApiKey();
+    return true;
   },
 
   /**
-   * Save API key to localStorage
+   * Sauvegarde la clé API (ne fait rien avec la nouvelle architecture)
    */
-  saveApiKey(key: string): void {
-    if (!this.isValidApiKeyFormat(key)) {
-      throw new Error('Format de clé API invalide');
-    }
-    
-    try {
-      localStorage.setItem(API_KEY_STORAGE_KEY, key);
-      console.log('API key saved to localStorage');
-    } catch (error) {
-      console.error('Error saving API key to localStorage:', error);
-      throw new Error('Erreur lors de l\'enregistrement de la clé API');
-    }
+  saveApiKey(): void {
+    console.log('API key is now managed on the server');
   },
 
   /**
-   * Clear API key from localStorage
+   * Supprime la clé API (ne fait rien avec la nouvelle architecture)
    */
   clearApiKey(): void {
-    localStorage.removeItem(API_KEY_STORAGE_KEY);
-    console.log('API key removed from localStorage');
+    console.log('API key is now managed on the server');
   },
 
   /**
-   * Test the API key
+   * Teste la clé API (toujours true avec la nouvelle architecture)
    */
-  async testApiKey(key: string): Promise<boolean> {
-    try {
-      // Make a minimal API call to test the key
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'user',
-              content: 'Test de connexion'
-            }
-          ],
-          max_tokens: 5
-        })
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error('Error testing API key:', error);
-      return false;
-    }
+  async testApiKey(): Promise<boolean> {
+    return true;
   }
 };
