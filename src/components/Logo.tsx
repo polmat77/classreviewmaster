@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 interface LogoProps {
   className?: string;
   showText?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 const Logo: React.FC<LogoProps> = ({ className, showText = true, size = 'md' }) => {
@@ -13,12 +13,14 @@ const Logo: React.FC<LogoProps> = ({ className, showText = true, size = 'md' }) 
     sm: 'h-6 w-6',
     md: 'h-8 w-8',
     lg: 'h-10 w-10',
+    xl: 'h-16 w-16', // New extra-large size
   };
 
   const textSizes = {
     sm: 'text-lg',
     md: 'text-xl',
     lg: 'text-2xl',
+    xl: 'text-3xl', // Corresponding text size for xl
   };
   
   return (
