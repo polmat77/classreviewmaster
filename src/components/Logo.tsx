@@ -23,11 +23,15 @@ const Logo: React.FC<LogoProps> = ({ className, showText = true, size = 'md' }) 
   
   return (
     <div className={cn("flex items-center space-x-2", className)}>
-      <div className={cn("relative", logoSizes[size])}>
+      <div className={cn("relative border border-transparent", logoSizes[size])}>
         <img 
           src="/lovable-uploads/b6023dae-14a9-4284-a657-bdd5298b7835.png"
           alt="ClassReviewMaster Logo"
           className="w-full h-full object-contain"
+          onError={(e) => {
+            console.error('Error loading logo image');
+            e.currentTarget.style.display = 'none';
+          }}
         />
       </div>
       
