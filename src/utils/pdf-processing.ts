@@ -303,157 +303,214 @@ export async function parseClassBulletins(
       onProgress(0); // Start progress at 0
     }
     
-    // Extract all text from PDF using pdfjs for better handling
-    const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
-    console.log(`PDF loaded with ${pdf.numPages} pages`);
-    
-    if (onProgress) {
-      onProgress(10); // PDF document loaded
+    // Vérifier la taille du buffer avant le traitement
+    const bufferSize = pdfBuffer.byteLength / (1024 * 1024); // en MB
+    if (bufferSize > 30) {
+      throw new Error(`Le fichier PDF est trop volumineux (${bufferSize.toFixed(2)} MB). Maximum recommandé: 30 MB`);
     }
     
-    // Process in batches to avoid memory issues with large documents
-    const batchSize = 5; // Process 5 pages at a time
-    const fullTextArray: string[] = [];
+    // Ajouter un timeout global pour l'ensemble du processus
+    const MAX_PROCESSING_TIME = 60000; // 60 secondes maximum
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("L'analyse du PDF a été interrompue car elle prenait trop de temps"));
+      }, MAX_PROCESSING_TIME);
+    });
     
-    for (let batchStart = 1; batchStart <= pdf.numPages; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize - 1, pdf.numPages);
-      console.log(`Processing pages ${batchStart} to ${batchEnd}`);
+    // Créer une promise pour le traitement normal
+    const processingPromise = async () => {
+      // Extract all text from PDF using pdfjs for better handling
+      const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
+      console.log(`PDF loaded with ${pdf.numPages} pages`);
       
-      const batchPromises = [];
-      for (let pageNum = batchStart; pageNum <= batchEnd; pageNum++) {
-        batchPromises.push(extractPageText(pdf, pageNum));
-      }
-      
-      const batchTexts = await Promise.all(batchPromises);
-      fullTextArray.push(...batchTexts);
-      
-      // Update progress during page processing (40% of total for this stage)
       if (onProgress) {
-        const progressValue = Math.min(10 + Math.round((batchEnd / pdf.numPages) * 40), 50);
-        onProgress(progressValue);
+        onProgress(10); // PDF document loaded
       }
-    }
-    
-    async function extractPageText(pdf: any, pageNum: number): Promise<string> {
-      const page = await pdf.getPage(pageNum);
-      const content = await page.getTextContent({
-        normalizeWhitespace: true
-      });
-      const pageText = content.items.map((item: any) => item.str || '').join(' ');
-      return pageText;
-    }
-    
-    const fullText = fullTextArray.join('\n');
-    
-    // Update progress: text extraction complete
-    if (onProgress) {
-      onProgress(50);
-    }
-    
-    // Split into individual bulletin texts
-    const bulletinTexts = splitBulletins(fullText);
-    console.log(`Identified ${bulletinTexts.length} individual student bulletins`);
-    
-    // Update progress: split complete
-    if (onProgress) {
-      onProgress(60);
-    }
-    
-    const students: StudentBulletin[] = [];
-    const allRemarks: string[] = [];
-    
-    // Process each bulletin with progress updates
-    for (let i = 0; i < bulletinTexts.length; i++) {
-      const bulletinText = bulletinTexts[i];
       
-      // Process individual bulletin (extract student name, class, etc.)
-      const nameMatch = bulletinText.match(/(?:Nom|Élève)\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i) || 
-                        bulletinText.match(/Bulletin[^:]*?:\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i);
+      // Limiter le nombre de pages traitées si nécessaire
+      const MAX_PAGES = 100;
+      const pagesToProcess = Math.min(pdf.numPages, MAX_PAGES);
+      if (pdf.numPages > MAX_PAGES) {
+        console.log(`Limiting processing to first ${MAX_PAGES} pages out of ${pdf.numPages}`);
+      }
       
-      const classMatch = bulletinText.match(/Classe\s*:?\s*([\wÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$)/i);
+      // Process in batches to avoid memory issues with large documents
+      const batchSize = 3; // Process 3 pages at a time (reduced from 5)
+      const fullTextArray: string[] = [];
       
-      const studentName = nameMatch ? nameMatch[1].trim() : "Élève Inconnu";
-      const className = classMatch ? classMatch[1].trim() : "Classe Inconnue";
-
-      // Extract subjects and remarks
-      const subjects: SubjectFeedback[] = [];
-      const lines = bulletinText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      let currentSubject: SubjectFeedback | null = null;
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+      for (let batchStart = 1; batchStart <= pagesToProcess; batchStart += batchSize) {
+        const batchEnd = Math.min(batchStart + batchSize - 1, pagesToProcess);
+        console.log(`Processing pages ${batchStart} to ${batchEnd}`);
         
-        // If line looks like a subject title (all caps or major subject name)
-        if (/^[A-ZÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$/.test(line) || 
-            /^(?:FRANÇAIS|MATHÉMATIQUES|HISTOIRE|GÉOGRAPHIE|ANGLAIS|PHYSIQUE|CHIMIE|SVT|EPS)$/i.test(line)) {
-          
-          // Save the previous subject feedback if any
-          if (currentSubject) {
-            subjects.push(currentSubject);
-          }
-          
-          // Start a new subject feedback
-          currentSubject = { subject: line, average: null, remark: "" };
-          // Next line(s) may contain average and remarks
-        } else if (currentSubject) {
-          // Check if the line contains a numeric average
-          const avgMatch = line.match(/(\d+[,.]\d+)\/20/);
-          if (avgMatch && currentSubject.average === null) {
-            // Parse the first number as the student's average for that subject
-            currentSubject.average = parseFloat(avgMatch[1].replace(',', '.'));
-            // Remove the number from the line when taking it as comment
-            const commentPart = line.replace(/(\d+[,.]\d+)\/20/, "").trim();
-            if (commentPart) {
-              currentSubject.remark += commentPart;
-            }
-          } else if (line.includes("Professeur") || line.includes("Enseignant")) {
-            // Extract teacher name if present
-            const teacherMatch = line.match(/(?:Professeur|Enseignant)\s*:?\s*(.+?)(?=\s*$)/i);
-            if (teacherMatch) {
-              currentSubject.teacher = teacherMatch[1].trim();
-            }
-          } else {
-            // Append the line to the remark
-            if (line) {
-              currentSubject.remark += (currentSubject.remark ? " " : "") + line;
-            }
-          }
+        const batchPromises = [];
+        for (let pageNum = batchStart; pageNum <= batchEnd; pageNum++) {
+          batchPromises.push(extractPageText(pdf, pageNum));
+        }
+        
+        try {
+          const batchTexts = await Promise.all(batchPromises);
+          fullTextArray.push(...batchTexts);
+        } catch (error) {
+          console.warn(`Error processing batch ${batchStart}-${batchEnd}:`, error);
+          // Continue to next batch instead of failing completely
+        }
+        
+        // Update progress during page processing (40% of total for this stage)
+        if (onProgress) {
+          const progressValue = Math.min(10 + Math.round((batchEnd / pagesToProcess) * 40), 50);
+          onProgress(progressValue);
         }
       }
       
-      // Push the last subject if it exists
-      if (currentSubject) {
-        subjects.push(currentSubject);
-      }
-
-      // Collect all non-empty remarks for class summary
-      subjects.forEach(sub => {
-        if (sub.remark && sub.remark.length > 10) { // Only add substantial remarks
-          allRemarks.push(`${sub.subject}: ${sub.remark}`);
+      async function extractPageText(pdf: any, pageNum: number): Promise<string> {
+        try {
+          const page = await pdf.getPage(pageNum);
+          const content = await page.getTextContent({
+            normalizeWhitespace: true
+          });
+          const pageText = content.items.map((item: any) => item.str || '').join(' ');
+          return pageText;
+        } catch (error) {
+          console.error(`Error extracting text from page ${pageNum}:`, error);
+          return ""; // Return empty string for failed pages
         }
-      });
-
-      students.push({ name: studentName, class: className, subjects });
-    }
-
-    // Generate class summary with NLP if we have enough data
-    let classSummary = "";
-    
-    if (allRemarks.length > 0) {
-      console.log(`Generating class summary based on ${allRemarks.length} subject remarks`);
+      }
       
+      const fullText = fullTextArray.join('\n');
+      
+      // Vérifier si nous avons extrait du texte
+      if (!fullText || fullText.trim().length < 100) {
+        throw new Error("Le PDF semble vide ou ne contient pas de texte extractible");
+      }
+      
+      // Update progress: text extraction complete
       if (onProgress) {
-        onProgress(95); // Summary generation in progress
+        onProgress(50);
       }
       
-      try {
-        // Prepare prompt for OpenAI
-        const prompt = `Vous êtes un professeur principal qui doit rédiger une synthèse pour le conseil de classe.
+      // Split into individual bulletin texts
+      const bulletinTexts = splitBulletins(fullText);
+      console.log(`Identified ${bulletinTexts.length} individual student bulletins`);
+      
+      // Vérifier si nous avons trouvé des bulletins
+      if (bulletinTexts.length === 0) {
+        throw new Error("Aucun bulletin n'a été détecté dans le PDF. Vérifiez le format du document.");
+      }
+      
+      // Update progress: split complete
+      if (onProgress) {
+        onProgress(60);
+      }
+      
+      const students: StudentBulletin[] = [];
+      const allRemarks: string[] = [];
+      
+      // Process each bulletin with progress updates
+      for (let i = 0; i < bulletinTexts.length; i++) {
+        const bulletinText = bulletinTexts[i];
+        
+        // Process individual bulletin (extract student name, class, etc.)
+        const nameMatch = bulletinText.match(/(?:Nom|Élève)\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i) || 
+                        bulletinText.match(/Bulletin[^:]*?:\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i);
+        
+        const classMatch = bulletinText.match(/Classe\s*:?\s*([\wÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$)/i);
+        
+        const studentName = nameMatch ? nameMatch[1].trim() : "Élève Inconnu";
+        const className = classMatch ? classMatch[1].trim() : "Classe Inconnue";
+
+        // Extract subjects and remarks
+        const subjects: SubjectFeedback[] = [];
+        const lines = bulletinText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let currentSubject: SubjectFeedback | null = null;
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          
+          // If line looks like a subject title (all caps or major subject name)
+          if (/^[A-ZÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$/.test(line) || 
+              /^(?:FRANÇAIS|MATHÉMATIQUES|HISTOIRE|GÉOGRAPHIE|ANGLAIS|PHYSIQUE|CHIMIE|SVT|EPS)$/i.test(line)) {
+            
+            // Save the previous subject feedback if any
+            if (currentSubject) {
+              subjects.push(currentSubject);
+            }
+            
+            // Start a new subject feedback
+            currentSubject = { subject: line, average: null, remark: "" };
+            // Next line(s) may contain average and remarks
+          } else if (currentSubject) {
+            // Check if the line contains a numeric average
+            const avgMatch = line.match(/(\d+[,.]\d+)\/20/);
+            if (avgMatch && currentSubject.average === null) {
+              // Parse the first number as the student's average for that subject
+              currentSubject.average = parseFloat(avgMatch[1].replace(',', '.'));
+              // Remove the number from the line when taking it as comment
+              const commentPart = line.replace(/(\d+[,.]\d+)\/20/, "").trim();
+              if (commentPart) {
+                currentSubject.remark += commentPart;
+              }
+            } else if (line.includes("Professeur") || line.includes("Enseignant")) {
+              // Extract teacher name if present
+              const teacherMatch = line.match(/(?:Professeur|Enseignant)\s*:?\s*(.+?)(?=\s*$)/i);
+              if (teacherMatch) {
+                currentSubject.teacher = teacherMatch[1].trim();
+              }
+            } else {
+              // Append the line to the remark
+              if (line) {
+                currentSubject.remark += (currentSubject.remark ? " " : "") + line;
+              }
+            }
+          }
+        }
+        
+        // Push the last subject if it exists
+        if (currentSubject) {
+          subjects.push(currentSubject);
+        }
+
+        // Collect all non-empty remarks for class summary
+        subjects.forEach(sub => {
+          if (sub.remark && sub.remark.length > 10) { // Only add substantial remarks
+            allRemarks.push(`${sub.subject}: ${sub.remark}`);
+          }
+        });
+
+        students.push({ name: studentName, class: className, subjects });
+        
+        // Update progress for each processed bulletin
+        if (onProgress) {
+          const bulletinProgress = Math.floor(60 + ((i + 1) / bulletinTexts.length) * 35);
+          onProgress(Math.min(bulletinProgress, 95));
+        }
+      }
+
+      // Vérifier si nous avons extrait des données d'élèves
+      if (students.length === 0) {
+        throw new Error("Aucune donnée d'élève n'a pu être extraite du PDF");
+      }
+
+      // Generate class summary with NLP if we have enough data
+      let classSummary = "";
+      
+      if (allRemarks.length > 0) {
+        console.log(`Generating class summary based on ${allRemarks.length} subject remarks`);
+        
+        if (onProgress) {
+          onProgress(95); // Summary generation in progress
+        }
+        
+        try {
+          // Limiter le nombre de remarques pour la requête à OpenAI
+          const maxRemarks = 20; // Réduire de 30 à 20
+          
+          // Prepare prompt for OpenAI
+          const prompt = `Vous êtes un professeur principal qui doit rédiger une synthèse pour le conseil de classe.
 Voici des extraits d'appréciations des professeurs pour l'ensemble des élèves:
 
-${allRemarks.slice(0, 30).map(r => `- ${r}`).join("\n")}
+${allRemarks.slice(0, maxRemarks).map(r => `- ${r}`).join("\n")}
 
-Rédigez un paragraphe de synthèse pour la classe entière (150-200 mots) qui:
+Rédigez un paragraphe de synthèse pour la classe entière (100-150 mots) qui:
 1. Identifie les points forts généraux de la classe
 2. Souligne les difficultés communes rencontrées
 3. Propose des axes d'amélioration
@@ -461,22 +518,26 @@ Rédigez un paragraphe de synthèse pour la classe entière (150-200 mots) qui:
 
 Synthèse pour la classe:`;
 
-        classSummary = await OpenAIService.generateText(prompt);
-      } catch (error) {
-        console.error("Error generating class summary:", error);
-        classSummary = "Impossible de générer une synthèse automatique. Veuillez consulter les appréciations individuelles.";
+          classSummary = await OpenAIService.generateText(prompt);
+        } catch (error) {
+          console.error("Error generating class summary:", error);
+          classSummary = "Impossible de générer une synthèse automatique. Veuillez consulter les appréciations individuelles.";
+        }
+      } else {
+        classSummary = "Pas suffisamment de données pour générer une synthèse de classe.";
       }
-    } else {
-      classSummary = "Pas suffisamment de données pour générer une synthèse de classe.";
-    }
+      
+      console.timeEnd("Class Bulletins Parsing");
+      
+      if (onProgress) {
+        onProgress(100); // Processing complete
+      }
+      
+      return { students, classSummary };
+    };
     
-    console.timeEnd("Class Bulletins Parsing");
-    
-    if (onProgress) {
-      onProgress(100); // Processing complete
-    }
-    
-    return { students, classSummary };
+    // Exécuter avec le timeout
+    return Promise.race([processingPromise(), timeoutPromise]);
   } catch (error) {
     console.error('Error parsing class bulletins:', error);
     throw new Error(`Erreur lors de l'analyse des bulletins: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);

@@ -67,21 +67,27 @@ export async function extractTextFromPDF(
       initPdfJs();
     }
     
+    // Vérification de la taille avant de traiter
+    const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(`Le fichier est trop volumineux (${(file.size / (1024 * 1024)).toFixed(2)} MB). La taille maximale recommandée est de 30 MB.`);
+    }
+    
     const arrayBuffer = await file.arrayBuffer();
     console.log(`PDF file loaded into memory: ${(arrayBuffer.byteLength / (1024 * 1024)).toFixed(2)} MB`);
     
-    // Set a timeout detector for long-running PDF processing
+    // Timeout plus court (45 secondes au lieu de 60)
     const timeoutPromise = new Promise<never>((_, reject) => {
       const timeoutId = setTimeout(() => {
         reject(new Error("Le traitement du PDF prend trop de temps. Le fichier est peut-être trop volumineux ou complexe."));
         console.warn("PDF processing timeout triggered");
-      }, 60000); // 60 seconds timeout
+      }, 45000); // 45 seconds timeout
       
       // Clear the timeout if processing completes
-      setTimeout(() => clearTimeout(timeoutId), 61000);
+      setTimeout(() => clearTimeout(timeoutId), 46000);
     });
     
-    // Create the PDF processing promise
+    // Create the PDF processing promise with incremental progress
     const processingPromise = async () => {
       const pdf = await pdfjs.getDocument({ 
         data: arrayBuffer,
@@ -91,26 +97,51 @@ export async function extractTextFromPDF(
       
       console.log(`PDF loaded with ${pdf.numPages} pages`);
       
-      // Process in chunks for larger documents
-      const chunkSize = 5; // Process 5 pages at a time
+      if (onProgress) {
+        onProgress(15); // Document loaded
+      }
+      
+      // Limiter le nombre de pages traitées
+      const MAX_PAGES = 100;
+      const pagesToProcess = Math.min(pdf.numPages, MAX_PAGES);
+      if (pdf.numPages > MAX_PAGES) {
+        console.warn(`PDF has ${pdf.numPages} pages, only processing first ${MAX_PAGES} for performance`);
+      }
+      
+      // Process in smaller chunks for larger documents
+      const chunkSize = 3; // Process 3 pages at a time (was 5)
       let fullText = '';
       
-      for (let chunkStart = 1; chunkStart <= pdf.numPages; chunkStart += chunkSize) {
-        const chunkEnd = Math.min(chunkStart + chunkSize - 1, pdf.numPages);
+      for (let chunkStart = 1; chunkStart <= pagesToProcess; chunkStart += chunkSize) {
+        const chunkEnd = Math.min(chunkStart + chunkSize - 1, pagesToProcess);
         console.log(`Processing pages ${chunkStart} to ${chunkEnd}`);
         
-        // Process pages in the current chunk
+        // Process pages in the current chunk with timeout for each chunk
+        const chunkTimeout = 8000; // 8 seconds per chunk
         const chunkPromises = [];
+        
         for (let i = chunkStart; i <= chunkEnd; i++) {
-          chunkPromises.push(processPage(pdf, i));
+          // Add individual page processing with timeout
+          const pagePromise = Promise.race([
+            processPage(pdf, i),
+            new Promise<string>((_, reject) => 
+              setTimeout(() => reject(new Error(`Timeout processing page ${i}`)), chunkTimeout)
+            )
+          ]);
+          chunkPromises.push(pagePromise);
         }
         
-        const chunkTexts = await Promise.all(chunkPromises);
-        fullText += chunkTexts.join('\n\n');
+        try {
+          const chunkTexts = await Promise.all(chunkPromises);
+          fullText += chunkTexts.join('\n\n');
+        } catch (error) {
+          console.error(`Error processing chunk ${chunkStart}-${chunkEnd}:`, error);
+          // Continue with next chunk instead of failing completely
+        }
         
         // Report progress
         if (onProgress) {
-          const progress = Math.min(Math.round((chunkEnd / pdf.numPages) * 100), 100);
+          const progress = Math.min(15 + Math.round((chunkEnd / pagesToProcess) * 85), 100);
           onProgress(progress);
         }
       }
@@ -149,12 +180,20 @@ export async function extractTextFromPDF(
  */
 export async function validatePdfFile(file: File): Promise<{ isValid: boolean; reason?: string }> {
   try {
-    // Check file size (limit to 20MB)
-    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+    // Check file size (limit to 30MB)
+    const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB
     if (file.size > MAX_FILE_SIZE) {
       return { 
         isValid: false, 
-        reason: `Le fichier est trop volumineux (${(file.size / (1024 * 1024)).toFixed(2)} MB). La taille maximale est de 20 MB.` 
+        reason: `Le fichier est trop volumineux (${(file.size / (1024 * 1024)).toFixed(2)} MB). La taille maximale est de 30 MB.` 
+      };
+    }
+    
+    // Détecter les cas où la taille est très petite (potentiellement corrompu)
+    if (file.size < 1024) { // Moins de 1KB
+      return {
+        isValid: false,
+        reason: "Le fichier PDF est trop petit et pourrait être corrompu."
       };
     }
     
@@ -163,29 +202,45 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
       initPdfJs();
     }
     
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-    
-    // Check for encryption - Modified to use metadata instead of direct property
-    const metadata = await pdf.getMetadata().catch(() => ({ info: {} }));
-    const isEncrypted = metadata.info && (metadata.info as any).IsEncrypted;
-    
-    if (isEncrypted) {
-      return { 
-        isValid: false, 
-        reason: "Le fichier PDF est protégé par mot de passe ou chiffré. Veuillez fournir une version non protégée." 
-      };
-    }
-    
-    // Check number of pages (limit to 100 pages for performance)
-    if (pdf.numPages > 100) {
-      return { 
+    // Utiliser un timeout pour la vérification
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const loadPromise = pdfjs.getDocument({ data: arrayBuffer }).promise;
+      
+      // Ajouter un timeout de 10 secondes pour l'ouverture du PDF
+      const pdf = await Promise.race([
+        loadPromise,
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error("Délai d'ouverture du PDF dépassé")), 10000)
+        )
+      ]);
+      
+      // Check for encryption - Modified to use metadata instead of direct property
+      const metadata = await pdf.getMetadata().catch(() => ({ info: {} }));
+      const isEncrypted = metadata.info && (metadata.info as any).IsEncrypted;
+      
+      if (isEncrypted) {
+        return { 
+          isValid: false, 
+          reason: "Le fichier PDF est protégé par mot de passe ou chiffré. Veuillez fournir une version non protégée." 
+        };
+      }
+      
+      // Check number of pages (limit to 100 pages for performance)
+      if (pdf.numPages > 100) {
+        return { 
+          isValid: false,
+          reason: `Le fichier PDF contient ${pdf.numPages} pages. Pour des raisons de performance, la limite est de 100 pages.`
+        };
+      }
+      
+      return { isValid: true };
+    } catch (error) {
+      return {
         isValid: false,
-        reason: `Le fichier PDF contient ${pdf.numPages} pages. Pour des raisons de performance, la limite est de 100 pages.`
+        reason: `Le PDF n'a pas pu être validé: ${error instanceof Error ? error.message : 'Erreur inconnue'}`
       };
     }
-    
-    return { isValid: true };
   } catch (error) {
     console.error('Error validating PDF file:', error);
     return { 
