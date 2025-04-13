@@ -1,4 +1,3 @@
-
 import * as XLSX from 'xlsx';
 import * as Papa from 'papaparse';
 import * as pdfjs from 'pdfjs-dist';
@@ -327,7 +326,29 @@ export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
           const csvData = results.data as any[][];
           console.log('Parsed CSV data:', csvData);
           
-          const parsedData = processExcelData(csvData);
+          // Problème identifié: Le CSV n'est pas correctement traité
+          // Remplacer les chaînes vides par null et nettoyer les données
+          const cleanedData = csvData.map(row => 
+            row.map(cell => (cell === "" ? null : cell))
+          );
+          
+          console.log('Cleaned CSV data:', cleanedData);
+          
+          const parsedData = processExcelData(cleanedData);
+          
+          // Vérification des données parsées
+          console.log('Processed CSV data:', JSON.stringify(parsedData, null, 2));
+          
+          if (parsedData.students.length === 0) {
+            console.warn('Warning: No students found in the CSV file');
+            toast.warning('Aucun élève n\'a été trouvé dans le fichier CSV. Vérifiez le format du fichier.');
+          }
+          
+          if (parsedData.subjects.length === 0) {
+            console.warn('Warning: No subjects found in the CSV file');
+            toast.warning('Aucune matière n\'a été trouvée dans le fichier CSV. Vérifiez le format du fichier.');
+          }
+          
           resolve(parsedData);
         } catch (error) {
           console.error('Error processing CSV data:', error);
@@ -337,7 +358,13 @@ export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
       error: (error) => {
         console.error('Error parsing CSV file:', error);
         reject(new Error(`Erreur lors de l'analyse du fichier CSV: ${error}`));
-      }
+      },
+      header: false,
+      skipEmptyLines: true,
+      dynamicTyping: true,
+      delimiter: '',
+      quoteChar: '"',
+      encoding: "UTF-8"
     });
   });
 };

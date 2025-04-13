@@ -14,6 +14,8 @@ export const TextGenerationService = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       
+      console.log('Sending request to OpenAI with prompt:', prompt.substring(0, 100) + '...');
+      
       const response = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -37,6 +39,7 @@ export const TextGenerationService = {
       }
 
       const data = await response.json();
+      console.log('Received response from OpenAI');
       return data.text;
     } catch (error) {
       console.error('Erreur lors de la génération de texte:', error);
