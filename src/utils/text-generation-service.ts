@@ -2,10 +2,7 @@
 import { toast } from 'sonner';
 import { OpenAIMessage, OpenAIRequest, OpenAIResponse } from './openai-types';
 
-// URL de l'Edge Function Supabase
-const EDGE_FUNCTION_URL = import.meta.env.DEV 
-  ? 'http://localhost:54321/functions/v1/openai-proxy'
-  : 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co/functions/v1/openai-proxy';
+const EDGE_FUNCTION_URL = 'https://hjrhsjrijhjnyyglxgfl.supabase.co/functions/v1/openai-proxy';
 
 export const TextGenerationService = {
   /**
