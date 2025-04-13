@@ -3,7 +3,7 @@ import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import StepIndicator from './StepIndicator';
-import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, BarChart, MessageCircle, UserCheck, FileText } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import Logo from './Logo';
@@ -18,10 +18,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isMobile = useIsMobile();
   
   const steps = [
-    { id: 1, name: 'Analyse des résultats', path: '/dashboard' },
-    { id: 2, name: 'Appréciation générale de classe', path: '/appreciation-generale' },
-    { id: 3, name: 'Appréciations individuelles', path: '/appreciations-individuelles' },
-    { id: 4, name: 'Rapport final', path: '/rapport' },
+    { id: 1, name: 'Analyse des résultats', path: '/dashboard', icon: BarChart },
+    { id: 2, name: 'Appréciation générale de classe', path: '/appreciation-generale', icon: MessageCircle },
+    { id: 3, name: 'Appréciations individuelles', path: '/appreciations-individuelles', icon: UserCheck },
+    { id: 4, name: 'Rapport final', path: '/rapport', icon: FileText },
   ];
   
   // Find current step
@@ -40,7 +40,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             to="/" 
             className="flex items-center space-x-2 transition-opacity hover:opacity-80"
           >
-            <Logo />
+            <Logo size="xl" />
           </Link>
           
           <div className="flex items-center space-x-4">

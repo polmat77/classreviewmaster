@@ -10,6 +10,7 @@ import AppreciationGenerale from "./pages/AppreciationGenerale";
 import AppreciationsIndividuelles from "./pages/AppreciationsIndividuelles";
 import Rapport from "./pages/Rapport";
 import NotFound from "./pages/NotFound";
+import StepNavigationExample from "./pages/StepNavigationExample";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/appreciation-generale" element={<AppreciationGenerale />} />
           <Route path="/appreciations-individuelles" element={<AppreciationsIndividuelles />} />
           <Route path="/rapport" element={<Rapport />} />
+          <Route path="/step-navigation-example" element={<StepNavigationExample />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
