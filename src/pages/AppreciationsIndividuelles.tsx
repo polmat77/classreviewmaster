@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
@@ -10,11 +9,11 @@ import { Button } from '@/components/ui/button';
 import { processGradeFiles } from '@/utils/data-processing';
 import { initPdfJs } from '@/utils/pdf-service';
 import { parseClassBulletins, generateStudentSummary } from '@/utils/pdf-processing';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import AnalysisUploader from '@/components/AnalysisUploader';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const AppreciationsIndividuelles = () => {
   // Replace mock data with data from analysis
@@ -352,393 +351,370 @@ const AppreciationsIndividuelles = () => {
           </p>
         </div>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="manual-upload" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span>Import manuel</span>
-            </TabsTrigger>
-            <TabsTrigger value="auto-analysis" className="flex items-center gap-2">
-              <BarChart className="h-4 w-4" />
-              <span>Analyse avancée</span>
-            </TabsTrigger>
-          </TabsList>
+        <div className="glass-panel p-5 space-y-4">
+          <div className="flex items-center space-x-2">
+            <FileText className="h-5 w-5 text-primary" />
+            <h3 className="text-base font-medium">Bulletins individuels</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-3">
+            Importez les bulletins individuels des élèves pour faciliter la génération des appréciations personnalisées
+          </p>
+          <FileUploader 
+            onFilesAccepted={handleIndividualReportUpload}
+            acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
+            maxFiles={30}
+            label="Importer les bulletins individuels"
+            description="Documents PDF, Excel ou CSV contenant les bulletins par élève"
+          />
           
-          <TabsContent value="manual-upload">
-            <div className="glass-panel p-5 space-y-4">
-              <div className="flex items-center space-x-2">
-                <FileText className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-medium">Bulletins individuels</h3>
-              </div>
-              <p className="text-sm text-muted-foreground mb-3">
-                Importez les bulletins individuels des élèves pour faciliter la génération des appréciations personnalisées
-              </p>
-              <FileUploader 
-                onFilesAccepted={handleIndividualReportUpload}
-                acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
-                maxFiles={30}
-                label="Importer les bulletins individuels"
-                description="Documents PDF, Excel ou CSV contenant les bulletins par élève"
-              />
-              
-              <div className="flex justify-center mt-4">
-                <Button 
-                  onClick={handleAnalyzeData} 
-                  className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300"
-                  size="lg"
-                  disabled={individualReportFiles.length === 0 || isAnalyzing}
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      Analyse en cours...
-                    </>
-                  ) : (
-                    <>
-                      <BarChart className="mr-2 h-5 w-5" />
-                      Analyser les données
-                    </>
-                  )}
-                </Button>
-              </div>
-              
-              {analysisData && (
-                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30 rounded-md text-sm flex items-center text-green-700 dark:text-green-400">
-                  <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                  Analyse terminée ! {analysisData.currentTerm.students.length} élèves analysés avec une moyenne générale de {analysisData.currentTerm.classAverage.toFixed(1)}.
-                  {schoolName && ` Établissement : ${schoolName}.`}
-                  {termInfo && ` Période : ${termInfo}.`}
-                </div>
+          <div className="flex justify-center mt-4">
+            <Button 
+              onClick={handleAnalyzeData} 
+              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300"
+              size="lg"
+              disabled={individualReportFiles.length === 0 || isAnalyzing}
+            >
+              {isAnalyzing ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                  Analyse en cours...
+                </>
+              ) : (
+                <>
+                  <BarChart className="mr-2 h-5 w-5" />
+                  Analyser les données
+                </>
               )}
-
-              {analysisError && (
-                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md text-sm flex items-center text-red-700 dark:text-red-400">
-                  <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
-                  Erreur : {analysisError}
-                </div>
-              )}
+            </Button>
+          </div>
+          
+          {analysisData && (
+            <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30 rounded-md text-sm flex items-center text-green-700 dark:text-green-400">
+              <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              Analyse terminée ! {analysisData.currentTerm.students.length} élèves analysés avec une moyenne générale de {analysisData.currentTerm.classAverage.toFixed(1)}.
+              {schoolName && ` Établissement : ${schoolName}.`}
+              {termInfo && ` Période : ${termInfo}.`}
             </div>
-          </TabsContent>
-          
-          <TabsContent value="auto-analysis">
-            <AnalysisUploader />
-          </TabsContent>
-        </Tabs>
+          )}
+
+          {analysisError && (
+            <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md text-sm flex items-center text-red-700 dark:text-red-400">
+              <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+              Erreur : {analysisError}
+            </div>
+          )}
+        </div>
         
         {/* Only show content if there's analysis data in the manual tab */}
-        {activeTab === 'manual-upload' && (
+        {!analysisData && !analysisError && noDataMessage}
+        {analysisError && errorMessage}
+        
+        {analysisData && (
           <>
-            {!analysisData && !analysisError && noDataMessage}
-            {analysisError && errorMessage}
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-medium">Gestion des appréciations</h2>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setViewMode('single')}
+                  className={cn(
+                    "p-2 rounded-md transition-colors",
+                    viewMode === 'single' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
+                  )}
+                  title="Vue individuelle"
+                >
+                  <Grid className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('all')}
+                  className={cn(
+                    "p-2 rounded-md transition-colors",
+                    viewMode === 'all' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
+                  )}
+                  title="Vue d'ensemble"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
             
-            {analysisData && (
-              <>
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-medium">Gestion des appréciations</h2>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setViewMode('single')}
-                      className={cn(
-                        "p-2 rounded-md transition-colors",
-                        viewMode === 'single' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
-                      )}
-                      title="Vue individuelle"
-                    >
-                      <Grid className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setViewMode('all')}
-                      className={cn(
-                        "p-2 rounded-md transition-colors",
-                        viewMode === 'all' ? "bg-primary text-white" : "bg-secondary hover:bg-secondary/80"
-                      )}
-                      title="Vue d'ensemble"
-                    >
-                      <List className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                {viewMode === 'single' ? (
-                  <div className="flex flex-col lg:flex-row gap-6">
-                    <div className="lg:w-1/3 flex flex-col">
-                      <div className="glass-panel p-4 space-y-4">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-medium">Liste des élèves</h3>
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={regenerateAllAppreciations}
-                              className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                              title="Régénérer toutes les appréciations"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </button>
-                            <button 
-                              onClick={saveAllAppreciations}
-                              className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                              title="Enregistrer toutes les appréciations"
-                            >
-                              <Save className="h-4 w-4" />
-                            </button>
-                            <button 
-                              onClick={() => toast.success("Impression lancée")}
-                              className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                              title="Imprimer les appréciations"
-                            >
-                              <Printer className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
-                            <Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
-                            <input 
-                              type="text"
-                              placeholder="Rechercher un élève..."
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              className="glass-input pl-9 h-9 w-full text-sm"
-                            />
-                          </div>
-                          
-                          <div className="relative">
-                            <Filter className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
-                            <select 
-                              value={filter}
-                              onChange={(e) => setFilter(e.target.value)}
-                              className="glass-input pl-9 pr-8 h-9 text-sm appearance-none"
-                            >
-                              <option value="all">Tous</option>
-                              <option value="excellent">Excellents</option>
-                              <option value="good">Bons</option>
-                              <option value="average">Moyens</option>
-                              <option value="struggling">En difficulté</option>
-                            </select>
-                          </div>
-                        </div>
-                        
-                        <div className="divide-y max-h-[500px] overflow-y-auto scrollbar-none">
-                          {filteredStudents.length > 0 ? filteredStudents.map((student: any) => (
-                            <button
-                              key={student.name}
-                              onClick={() => setSelectedStudent(student)}
-                              className={cn(
-                                "w-full flex items-center p-2.5 hover:bg-secondary/50 transition-colors text-left",
-                                selectedStudent?.name === student.name && "bg-primary/5"
-                              )}
-                            >
-                              <div className="flex-1">
-                                <div className="font-medium">{student.name}</div>
-                                <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                                  <span>Moyenne: {student.average?.toFixed(1) || "N/A"}</span>
-                                  <span>{getTrendIcon(student)}</span>
-                                </div>
-                              </div>
-                              
-                              <div className={cn(
-                                "text-xs px-2 py-0.5 rounded-full",
-                                getCategoryColor(student.average || 0)
-                              )}>
-                                {getCategoryName(student.average || 0)}
-                              </div>
-                            </button>
-                          )) : (
-                            <div className="py-8 text-center text-muted-foreground text-sm">
-                              <div className="flex justify-center mb-2">
-                                <UserPlus className="h-6 w-6" />
-                              </div>
-                              <p>Aucun élève trouvé</p>
-                              <p className="text-xs">Ajustez vos critères de recherche</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="lg:w-2/3">
-                      {selectedStudent && (
-                        <div className="space-y-4">
-                          <div className="glass-panel p-5">
-                            <div className="flex justify-between items-center mb-4">
-                              <div>
-                                <h3 className="text-lg font-medium">{selectedStudent.name}</h3>
-                                <p className="text-sm text-muted-foreground">
-                                  Moyenne générale: {selectedStudent.average?.toFixed(1) || "N/A"} {getTrendIcon(selectedStudent)}
-                                </p>
-                              </div>
-                              
-                              <div className={cn(
-                                "text-sm px-3 py-1 rounded-full font-medium",
-                                getCategoryColor(selectedStudent.average || 0)
-                              )}>
-                                {getCategoryName(selectedStudent.average || 0)}
-                              </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                              {getStudentSubjects(selectedStudent).map((subject: any, index: number) => (
-                                <div key={index} className="p-3 bg-secondary/50 rounded-lg">
-                                  <div className="text-xs text-muted-foreground">{subject.name}</div>
-                                  <div className="text-lg font-medium">{subject.grade?.toFixed(1) || "N/A"}</div>
-                                  {subject.comment && (
-                                    <div className="text-xs text-muted-foreground mt-1 line-clamp-1" title={subject.comment}>
-                                      {subject.comment}
-                                    </div>
-                                  )}
-                                  {subject.teacher && (
-                                    <div className="text-xs font-medium mt-1">
-                                      {subject.teacher}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                            
-                            <AppreciationGenerator 
-                              type="individual"
-                              studentName={selectedStudent.name}
-                              studentData={selectedStudent}
-                              maxChars={500}
-                              className="mb-0"
-                              analysisData={analysisData}
-                              onAppreciationGenerated={(appreciation) => handleAppreciationGenerated(selectedStudent.name, appreciation)}
-                            />
-                            
-                            {/* Add AI-powered appreciation button */}
-                            <div className="mt-4 pt-4 border-t">
-                              <Button
-                                variant="outline"
-                                className="w-full flex items-center justify-center gap-2"
-                                onClick={async () => {
-                                  try {
-                                    toast.info("Génération de l'appréciation en cours...");
-                                    
-                                    // Format student data for our generator
-                                    const studentBulletin = {
-                                      name: selectedStudent.name,
-                                      class: analysisData.currentTerm.schoolName || 'Classe',
-                                      subjects: selectedStudent.subjects.map((subj: any) => ({
-                                        subject: subj.name,
-                                        average: subj.grade,
-                                        remark: subj.comment,
-                                        teacher: subj.teacher
-                                      }))
-                                    };
-                                    
-                                    const appreciation = await generateStudentSummary(studentBulletin);
-                                    handleAppreciationGenerated(selectedStudent.name, appreciation);
-                                    toast.success("Appréciation générée avec succès");
-                                  } catch (error) {
-                                    console.error("Error generating appreciation:", error);
-                                    toast.error("Erreur lors de la génération de l'appréciation");
-                                  }
-                                }}
-                              >
-                                <RotateCw className="h-4 w-4" />
-                                <span>Générer avec IA</span>
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="glass-panel p-5 space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-medium">Vue d'ensemble des appréciations</h3>
-                      <div className="flex space-x-2">
-                        <button
+            {viewMode === 'single' ? (
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="lg:w-1/3 flex flex-col">
+                  <div className="glass-panel p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">Liste des élèves</h3>
+                      <div className="flex gap-2">
+                        <button 
                           onClick={regenerateAllAppreciations}
-                          className="button-secondary flex items-center space-x-2 text-sm"
+                          className="p-1.5 rounded-md hover:bg-secondary transition-colors"
                           title="Régénérer toutes les appréciations"
                         >
                           <RefreshCw className="h-4 w-4" />
-                          <span>Tout régénérer</span>
                         </button>
-                        <Button
+                        <button 
                           onClick={saveAllAppreciations}
-                          variant="secondary"
-                          className="flex items-center gap-2"
+                          className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                          title="Enregistrer toutes les appréciations"
                         >
-                          <Download className="h-4 w-4" />
-                          <span>Exporter</span>
-                        </Button>
+                          <Save className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => toast.success("Impression lancée")}
+                          className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                          title="Imprimer les appréciations"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                     
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="bg-secondary/50">
-                            <th className="p-3 text-left text-sm font-medium">Élève</th>
-                            <th className="p-3 text-left text-sm font-medium">Moyenne</th>
-                            <th className="p-3 text-left text-sm font-medium">Appréciation</th>
-                            <th className="p-3 text-center text-sm font-medium w-24">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {filteredStudents.map((student: any) => (
-                            <tr key={student.name} className="hover:bg-secondary/30 transition-colors">
-                              <td className="p-3">
-                                <div className="flex items-center">
-                                  <div className={cn(
-                                    "w-2 h-2 rounded-full mr-2",
-                                    getCategoryColor(student.average || 0)
-                                      .replace('bg-teal-100', 'bg-teal-500')
-                                      .replace('bg-green-100', 'bg-green-500')
-                                      .replace('bg-yellow-100', 'bg-yellow-500')
-                                      .replace('bg-red-100', 'bg-red-500')
-                                  )}></div>
-                                  <span className="font-medium">{student.name}</span>
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                <div className="flex items-center">
-                                  <span>{student.average?.toFixed(1) || "N/A"}</span>
-                                  <span className="ml-1">{getTrendIcon(student)}</span>
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                <div className="text-sm text-muted-foreground max-w-xl">
-                                  {appreciations[student.name] || 
-                                    <span className="italic">Cliquez sur "Tout régénérer" pour créer les appréciations</span>
-                                  }
-                                </div>
-                              </td>
-                              <td className="p-3 text-center">
-                                <div className="flex justify-center space-x-1">
-                                  <button 
-                                    onClick={() => {
-                                      setSelectedStudent(student);
-                                      setViewMode('single');
-                                    }}
-                                    className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                                    title="Modifier"
-                                  >
-                                    <Grid className="h-4 w-4" />
-                                  </button>
-                                  <button 
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(appreciations[student.name] || '');
-                                      toast.success("Appréciation copiée");
-                                    }}
-                                    className="p-1.5 rounded-md hover:bg-secondary transition-colors"
-                                    title="Copier"
-                                  >
-                                    <Copy className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
+                        <input 
+                          type="text"
+                          placeholder="Rechercher un élève..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="glass-input pl-9 h-9 w-full text-sm"
+                        />
+                      </div>
+                      
+                      <div className="relative">
+                        <Filter className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
+                        <select 
+                          value={filter}
+                          onChange={(e) => setFilter(e.target.value)}
+                          className="glass-input pl-9 pr-8 h-9 text-sm appearance-none"
+                        >
+                          <option value="all">Tous</option>
+                          <option value="excellent">Excellents</option>
+                          <option value="good">Bons</option>
+                          <option value="average">Moyens</option>
+                          <option value="struggling">En difficulté</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="divide-y max-h-[500px] overflow-y-auto scrollbar-none">
+                      {filteredStudents.length > 0 ? filteredStudents.map((student: any) => (
+                        <button
+                          key={student.name}
+                          onClick={() => setSelectedStudent(student)}
+                          className={cn(
+                            "w-full flex items-center p-2.5 hover:bg-secondary/50 transition-colors text-left",
+                            selectedStudent?.name === student.name && "bg-primary/5"
+                          )}
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium">{student.name}</div>
+                            <div className="text-xs text-muted-foreground flex items-center space-x-1">
+                              <span>Moyenne: {student.average?.toFixed(1) || "N/A"}</span>
+                              <span>{getTrendIcon(student)}</span>
+                            </div>
+                          </div>
+                          
+                          <div className={cn(
+                            "text-xs px-2 py-0.5 rounded-full",
+                            getCategoryColor(student.average || 0)
+                          )}>
+                            {getCategoryName(student.average || 0)}
+                          </div>
+                        </button>
+                      )) : (
+                        <div className="py-8 text-center text-muted-foreground text-sm">
+                          <div className="flex justify-center mb-2">
+                            <UserPlus className="h-6 w-6" />
+                          </div>
+                          <p>Aucun élève trouvé</p>
+                          <p className="text-xs">Ajustez vos critères de recherche</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </>
+                </div>
+                
+                <div className="lg:w-2/3">
+                  {selectedStudent && (
+                    <div className="space-y-4">
+                      <div className="glass-panel p-5">
+                        <div className="flex justify-between items-center mb-4">
+                          <div>
+                            <h3 className="text-lg font-medium">{selectedStudent.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Moyenne générale: {selectedStudent.average?.toFixed(1) || "N/A"} {getTrendIcon(selectedStudent)}
+                            </p>
+                          </div>
+                          
+                          <div className={cn(
+                            "text-sm px-3 py-1 rounded-full font-medium",
+                            getCategoryColor(selectedStudent.average || 0)
+                          )}>
+                            {getCategoryName(selectedStudent.average || 0)}
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                          {getStudentSubjects(selectedStudent).map((subject: any, index: number) => (
+                            <div key={index} className="p-3 bg-secondary/50 rounded-lg">
+                              <div className="text-xs text-muted-foreground">{subject.name}</div>
+                              <div className="text-lg font-medium">{subject.grade?.toFixed(1) || "N/A"}</div>
+                              {subject.comment && (
+                                <div className="text-xs text-muted-foreground mt-1 line-clamp-1" title={subject.comment}>
+                                  {subject.comment}
+                                </div>
+                              )}
+                              {subject.teacher && (
+                                <div className="text-xs font-medium mt-1">
+                                  {subject.teacher}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <AppreciationGenerator 
+                          type="individual"
+                          studentName={selectedStudent.name}
+                          studentData={selectedStudent}
+                          maxChars={500}
+                          className="mb-0"
+                          analysisData={analysisData}
+                          onAppreciationGenerated={(appreciation) => handleAppreciationGenerated(selectedStudent.name, appreciation)}
+                        />
+                        
+                        {/* Add AI-powered appreciation button */}
+                        <div className="mt-4 pt-4 border-t">
+                          <Button
+                            variant="outline"
+                            className="w-full flex items-center justify-center gap-2"
+                            onClick={async () => {
+                              try {
+                                toast.info("Génération de l'appréciation en cours...");
+                                
+                                // Format student data for our generator
+                                const studentBulletin = {
+                                  name: selectedStudent.name,
+                                  class: analysisData.currentTerm.schoolName || 'Classe',
+                                  subjects: selectedStudent.subjects.map((subj: any) => ({
+                                    subject: subj.name,
+                                    average: subj.grade,
+                                    remark: subj.comment,
+                                    teacher: subj.teacher
+                                  }))
+                                };
+                                
+                                const appreciation = await generateStudentSummary(studentBulletin);
+                                handleAppreciationGenerated(selectedStudent.name, appreciation);
+                                toast.success("Appréciation générée avec succès");
+                              } catch (error) {
+                                console.error("Error generating appreciation:", error);
+                                toast.error("Erreur lors de la génération de l'appréciation");
+                              }
+                            }}
+                          >
+                            <RotateCw className="h-4 w-4" />
+                            <span>Générer avec IA</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="glass-panel p-5 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium">Vue d'ensemble des appréciations</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={regenerateAllAppreciations}
+                      className="button-secondary flex items-center space-x-2 text-sm"
+                      title="Régénérer toutes les appréciations"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      <span>Tout régénérer</span>
+                    </button>
+                    <Button
+                      onClick={saveAllAppreciations}
+                      variant="secondary"
+                      className="flex items-center gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Exporter</span>
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-secondary/50">
+                        <th className="p-3 text-left text-sm font-medium">Élève</th>
+                        <th className="p-3 text-left text-sm font-medium">Moyenne</th>
+                        <th className="p-3 text-left text-sm font-medium">Appréciation</th>
+                        <th className="p-3 text-center text-sm font-medium w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredStudents.map((student: any) => (
+                        <tr key={student.name} className="hover:bg-secondary/30 transition-colors">
+                          <td className="p-3">
+                            <div className="flex items-center">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full mr-2",
+                                getCategoryColor(student.average || 0)
+                                  .replace('bg-teal-100', 'bg-teal-500')
+                                  .replace('bg-green-100', 'bg-green-500')
+                                  .replace('bg-yellow-100', 'bg-yellow-500')
+                                  .replace('bg-red-100', 'bg-red-500')
+                              )}></div>
+                              <span className="font-medium">{student.name}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center">
+                              <span>{student.average?.toFixed(1) || "N/A"}</span>
+                              <span className="ml-1">{getTrendIcon(student)}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="text-sm text-muted-foreground max-w-xl">
+                              {appreciations[student.name] || 
+                                <span className="italic">Cliquez sur "Tout régénérer" pour créer les appréciations</span>
+                              }
+                            </div>
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="flex justify-center space-x-1">
+                              <button 
+                                onClick={() => {
+                                  setSelectedStudent(student);
+                                  setViewMode('single');
+                                }}
+                                className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                                title="Modifier"
+                              >
+                                <Grid className="h-4 w-4" />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  navigator.clipboard.writeText(appreciations[student.name] || '');
+                                  toast.success("Appréciation copiée");
+                                }}
+                                className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                                title="Copier"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
           </>
         )}
