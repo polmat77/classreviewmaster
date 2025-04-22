@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
-import { ChevronRight, Info, FileSpreadsheet, Upload, Table, Calendar, GraduationCap, BarChart2 } from 'lucide-react';
+import { ChevronRight, Info, FileSpreadsheet, Upload, Table, Calendar, GraduationCap, BarChart2, Database } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { processGradeFiles, savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
@@ -169,7 +170,14 @@ const Index = () => {
         </div>
         
         <div className="glass-panel p-5 space-y-6">
-          <h2 className="text-lg font-medium">Fichiers de notes</h2>
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-lg font-medium">Fichiers de notes</h2>
+            
+            <Link to="/importation-bulletins" className="text-sm text-primary hover:text-primary/80 flex items-center">
+              <Database className="h-4 w-4 mr-1" />
+              <span>Nouvel outil d'importation avancé</span>
+            </Link>
+          </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-3">
@@ -217,6 +225,16 @@ const Index = () => {
               <BarChart2 className="mr-2 h-5 w-5" />
               {isLoading ? 'Analyse en cours...' : 'Analyser les données'}
             </Button>
+          </div>
+          
+          <div className="mt-4 flex items-center justify-center">
+            <Link 
+              to="/importation-bulletins" 
+              className="text-sm text-primary hover:underline flex items-center"
+            >
+              <Info className="h-4 w-4 mr-1" />
+              <span>Vous avez un format spécifique ? Essayez notre nouvel outil d'importation avancé</span>
+            </Link>
           </div>
         </div>
         
