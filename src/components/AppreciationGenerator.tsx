@@ -1,12 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Slider } from '@/components/ui/slider';
-import { Loader2, RefreshCw, Copy, Save, Frown, Meh, Smile } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OpenAIService } from '@/utils/openai-service';
 import { toast } from 'sonner';
 import FileUploader from './FileUploader';
+import ToneSelector from './appreciation/ToneSelector';
+import LengthSelector from './appreciation/LengthSelector';
+import AppreciationResult from './appreciation/AppreciationResult';
 
 interface AppreciationGeneratorProps {
   type: 'class' | 'individual';
@@ -61,11 +64,10 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
       const dataToUse = type === 'individual' && student 
         ? { student, classData: analysisData }
         : analysisData || classReportFiles;
-
-      console.log("Using data for OpenAI:", dataToUse);
       
       if (type === 'individual' && student) {
-        result = await OpenAIService.generateIndividualAppreciation(
+        result = await OpenAIService.generateStudentAppreciation(
+          student.name,
           dataToUse,
           tone,
           length[0]
@@ -100,7 +102,6 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
 
   const handleFileUpload = (files: File[]) => {
     setClassReportFiles(files);
-    // Optional: trigger file analysis here if needed
   };
 
   return (
@@ -120,40 +121,8 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
             </div>
           )}
 
-          <div className="space-y-4">
-            <h2 className="text-xl">Ton de l'appréciation :</h2>
-            <div className="flex flex-wrap gap-4 justify-center">
-              {['exigeant', 'neutre', 'dithyrambique'].map((toneOption) => (
-                <Button 
-                  key={toneOption}
-                  variant={tone === toneOption ? "default" : "outline"}
-                  size="icon"
-                  className="h-16 w-16 rounded-full"
-                  onClick={() => setTone(toneOption)}
-                >
-                  {toneOption === 'exigeant' && <Frown className="h-8 w-8" />}
-                  {toneOption === 'neutre' && <Meh className="h-8 w-8" />}
-                  {toneOption === 'dithyrambique' && <Smile className="h-8 w-8" />}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl">Longueur :</h2>
-              <span className="text-sm text-muted-foreground">
-                {length[0]}/{maxChars} caractères
-              </span>
-            </div>
-            <Slider
-              value={length}
-              max={maxChars}
-              step={10}
-              onValueChange={setLength}
-              className="w-full"
-            />
-          </div>
+          <ToneSelector tone={tone} onToneChange={setTone} />
+          <LengthSelector length={length} maxChars={maxChars} onLengthChange={setLength} />
 
           <Button 
             onClick={generateAppreciation}
@@ -171,39 +140,11 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
           </Button>
 
           {appreciation && (
-            <div className="space-y-4">
-              <h2 className="text-xl">Résultat :</h2>
-              <div className="p-6 rounded-lg bg-white border min-h-[150px] text-lg">
-                {appreciation}
-              </div>
-              
-              <div className="flex gap-4">
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={generateAppreciation}
-                >
-                  <RefreshCw className="mr-2" />
-                  Régénérer
-                </Button>
-                <Button 
-                  variant="outline"
-                  className="flex-1"
-                  onClick={copyToClipboard}
-                >
-                  <Copy className="mr-2" />
-                  Copier
-                </Button>
-                <Button 
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => toast.success("Appréciation sauvegardée")}
-                >
-                  <Save className="mr-2" />
-                  Sauvegarder
-                </Button>
-              </div>
-            </div>
+            <AppreciationResult 
+              appreciation={appreciation}
+              onRegenerate={generateAppreciation}
+              onCopy={copyToClipboard}
+            />
           )}
         </div>
       </CardContent>
@@ -212,3 +153,4 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
 };
 
 export default AppreciationGenerator;
+
