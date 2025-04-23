@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useNavigate } from 'react-router-dom';
 import FileUploader from '@/components/FileUploader';
-import BulletinMappingInterface from '@/components/BulletinMappingInterface';
+import BulletinMappingInterfaceV2 from '@/components/BulletinMappingInterfaceV2';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -169,7 +169,7 @@ const ImportationBulletins: React.FC = () => {
               
               {showMapping && pdfText && (
                 <div className="mt-6">
-                  <BulletinMappingInterface
+                  <BulletinMappingInterfaceV2
                     extractedText={pdfText}
                     onMappingComplete={handleMappingComplete}
                     fileType="pdf"
@@ -203,7 +203,7 @@ const ImportationBulletins: React.FC = () => {
               
               {showMapping && tabularData.length > 0 && (
                 <div className="mt-6">
-                  <BulletinMappingInterface
+                  <BulletinMappingInterfaceV2
                     extractedText=""
                     onMappingComplete={handleMappingComplete}
                     fileType={tabularFile?.name.endsWith('.csv') ? 'csv' : 'excel'}
