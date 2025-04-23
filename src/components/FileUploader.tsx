@@ -31,6 +31,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       return;
     }
     
+    console.log('Files accepted:', acceptedFiles.map(f => `${f.name} (${f.type})`));
+    
     // Process the files here
     const newFiles = acceptedFiles.map(file => 
       Object.assign(file, {
@@ -64,15 +66,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
     onDrop,
-    accept: acceptedFileTypes.reduce((acc, type) => {
-      const mimeTypes = {
-        '.csv': { 'text/csv': [] },
-        '.xlsx': { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [] },
-        '.xls': { 'application/vnd.ms-excel': [] },
-        '.pdf': { 'application/pdf': [] },
-      };
-      return { ...acc, ...(mimeTypes[type as keyof typeof mimeTypes] || {}) };
-    }, {}),
+    accept: {
+      'application/pdf': ['.pdf'],
+      'text/csv': ['.csv'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+    },
     maxFiles,
     multiple: true,
   });
