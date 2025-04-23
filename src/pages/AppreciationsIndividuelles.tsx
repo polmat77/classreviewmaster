@@ -16,13 +16,11 @@ import AnalysisUploader from '@/components/AnalysisUploader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const AppreciationsIndividuelles = () => {
-  // Replace mock data with data from analysis
   const [individualReportFiles, setIndividualReportFiles] = useState<File[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   
-  // State to track the currently selected student
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
@@ -30,20 +28,16 @@ const AppreciationsIndividuelles = () => {
   const [appreciations, setAppreciations] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<string>('manual-upload');
 
-  // Initialize PDF.js when component mounts
   useEffect(() => {
     const cleanupPdfJs = initPdfJs();
     return () => cleanupPdfJs();
   }, []);
 
-  // Extract students from analysis data or use empty array
   const students = analysisData?.currentTerm?.students || [];
   
-  // Filter students based on search and category
   const filteredStudents = students.filter((student: any) => {
     const matchesSearch = student?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Determine category based on average
     const avg = student.average || 0;
     let category = '';
     if (avg >= 16) category = 'excellent';
@@ -55,7 +49,6 @@ const AppreciationsIndividuelles = () => {
     return matchesSearch && matchesFilter;
   });
 
-  // Set a default selected student when analysis data changes
   React.useEffect(() => {
     if (analysisData?.currentTerm?.students?.length > 0 && !selectedStudent) {
       setSelectedStudent(analysisData.currentTerm.students[0]);
@@ -64,9 +57,9 @@ const AppreciationsIndividuelles = () => {
   
   const handleIndividualReportUpload = (files: File[]) => {
     setIndividualReportFiles(files);
-    setAnalysisData(null); // Reset analysis when new files are uploaded
-    setSelectedStudent(null); // Reset selected student
-    setAnalysisError(null); // Clear any previous errors
+    setAnalysisData(null);
+    setSelectedStudent(null);
+    setAnalysisError(null);
     toast.success("Bulletins individuels importés avec succès");
   };
   
@@ -80,19 +73,16 @@ const AppreciationsIndividuelles = () => {
     setAnalysisError(null);
     
     try {
-      // Show more descriptive processing message
       toast.info("Traitement des fichiers PDF en cours... Cela peut prendre un moment.", {
         duration: 10000,
       });
       
-      // Use our new parsing function for class bulletins
       const file = individualReportFiles[0];
       const fileBuffer = await file.arrayBuffer();
       
       if (file.type === 'application/pdf') {
         const bulletinData = await parseClassBulletins(fileBuffer);
         
-        // Map the bulletin data to the format expected by the rest of the application
         const mappedData = {
           currentTerm: {
             term: 'Trimestre actuel',
@@ -116,7 +106,6 @@ const AppreciationsIndividuelles = () => {
         
         setAnalysisData(mappedData);
       } else {
-        // Fallback to original method for non-PDF files
         const data = await processGradeFiles(individualReportFiles);
         
         if (!data || !data.currentTerm || !data.currentTerm.students || data.currentTerm.students.length === 0) {
@@ -126,7 +115,6 @@ const AppreciationsIndividuelles = () => {
         setAnalysisData(data);
       }
       
-      // Set the first student as selected by default
       if (analysisData?.currentTerm?.students?.length > 0) {
         setSelectedStudent(analysisData.currentTerm.students[0]);
       }
@@ -150,7 +138,6 @@ const AppreciationsIndividuelles = () => {
     
     toast.info("Génération des appréciations en cours...", { duration: 3000 });
     
-    // Generate appreciations for all students
     const newAppreciations: Record<string, string> = {};
     
     const students = analysisData.currentTerm.students;
@@ -158,7 +145,6 @@ const AppreciationsIndividuelles = () => {
     
     for (const student of students) {
       try {
-        // Format student data for our generator
         const studentBulletin = {
           name: student.name,
           class: analysisData.currentTerm.schoolName || 'Classe',
@@ -170,7 +156,6 @@ const AppreciationsIndividuelles = () => {
           }))
         };
         
-        // Generate appreciation using our new AI-powered generator
         const appreciation = await generateStudentSummary(studentBulletin);
         newAppreciations[student.name] = appreciation;
         
@@ -189,7 +174,6 @@ const AppreciationsIndividuelles = () => {
   };
   
   const saveAllAppreciations = () => {
-    // Create a text file with all appreciations
     const content = Object.entries(appreciations)
       .map(([name, text]) => `${name}\n${'='.repeat(name.length)}\n\n${text}\n\n`)
       .join('\n');
@@ -207,11 +191,13 @@ const AppreciationsIndividuelles = () => {
     toast.success("Toutes les appréciations ont été enregistrées");
   };
   
-  const handleAppreciationGenerated = (studentName: string, appreciation: string) => {
-    setAppreciations(prev => ({
-      ...prev,
-      [studentName]: appreciation
-    }));
+  const handleAppreciationGenerated = (appreciation: string) => {
+    if (selectedStudent) {
+      setAppreciations(prev => ({
+        ...prev,
+        [selectedStudent.name]: appreciation
+      }));
+    }
   };
   
   const getCategoryColor = (avg: number) => {
@@ -229,11 +215,9 @@ const AppreciationsIndividuelles = () => {
   };
   
   const getTrendIcon = (student: any) => {
-    // Calculate trend using previous data if available
     if (analysisData?.previousTerms && analysisData?.previousTerms.length > 0) {
       const prevData = analysisData.previousTerms[0];
       if (prevData) {
-        // This is simplified - in reality you'd need to match the student across terms
         if (student.average > prevData.classAverage) return <span className="text-green-500">▲</span>;
         if (student.average < prevData.classAverage) return <span className="text-red-500">▼</span>;
       }
@@ -241,12 +225,10 @@ const AppreciationsIndividuelles = () => {
     return <span className="text-yellow-500">◆</span>;
   };
   
-  // Helper function to get subjects for a student with proper error handling
   const getStudentSubjects = (student: any) => {
     if (!student) return [];
     if (!student.subjects) return [];
     
-    // Return either all subjects or first 4 if there are many
     const subjectsToShow = student.subjects.length > 4 
       ? student.subjects.slice(0, 4)
       : student.subjects;
@@ -254,7 +236,6 @@ const AppreciationsIndividuelles = () => {
     return subjectsToShow;
   };
   
-  // Helper function to calculate class average from students
   const calculateClassAverage = (students: Array<{
     subjects: Array<{average: number | null}>
   }>) => {
@@ -273,7 +254,6 @@ const AppreciationsIndividuelles = () => {
     return totalCount > 0 ? totalSum / totalCount : 0;
   };
   
-  // Helper function to calculate student average from subjects
   const calculateStudentAverage = (subjects: Array<{average: number | null}>) => {
     const validGrades = subjects
       .map(s => s.average)
@@ -284,7 +264,6 @@ const AppreciationsIndividuelles = () => {
       : 0;
   };
   
-  // Helper function to categorize students based on their average
   const categorizeStudents = (students: Array<{
     subjects: Array<{average: number | null}>
   }>) => {
@@ -308,7 +287,6 @@ const AppreciationsIndividuelles = () => {
     return result;
   };
   
-  // Placeholder message when no data is available
   const noDataMessage = (
     <div className="text-center p-6 space-y-4">
       <div className="flex justify-center items-center space-x-2 text-muted-foreground">
@@ -321,7 +299,6 @@ const AppreciationsIndividuelles = () => {
     </div>
   );
   
-  // Error message when analysis fails
   const errorMessage = (
     <div className="text-center p-6 space-y-4">
       <div className="flex justify-center items-center space-x-2 text-destructive">
@@ -337,7 +314,6 @@ const AppreciationsIndividuelles = () => {
     </div>
   );
 
-  // Get school name from analysis data
   const schoolName = analysisData?.currentTerm?.schoolName;
   const termInfo = analysisData?.currentTerm?.term;
   
@@ -405,7 +381,6 @@ const AppreciationsIndividuelles = () => {
           )}
         </div>
         
-        {/* Only show content if there's analysis data in the manual tab */}
         {!analysisData && !analysisError && noDataMessage}
         {analysisError && errorMessage}
         
@@ -575,15 +550,13 @@ const AppreciationsIndividuelles = () => {
                         
                         <AppreciationGenerator 
                           type="individual"
-                          studentName={selectedStudent.name}
-                          studentData={selectedStudent}
                           maxChars={500}
                           className="mb-0"
                           analysisData={analysisData}
-                          onAppreciationGenerated={(appreciation) => handleAppreciationGenerated(selectedStudent.name, appreciation)}
+                          student={selectedStudent}
+                          onAppreciationGenerated={handleAppreciationGenerated}
                         />
                         
-                        {/* Add AI-powered appreciation button */}
                         <div className="mt-4 pt-4 border-t">
                           <Button
                             variant="outline"
@@ -592,7 +565,6 @@ const AppreciationsIndividuelles = () => {
                               try {
                                 toast.info("Génération de l'appréciation en cours...");
                                 
-                                // Format student data for our generator
                                 const studentBulletin = {
                                   name: selectedStudent.name,
                                   class: analysisData.currentTerm.schoolName || 'Classe',
@@ -605,7 +577,7 @@ const AppreciationsIndividuelles = () => {
                                 };
                                 
                                 const appreciation = await generateStudentSummary(studentBulletin);
-                                handleAppreciationGenerated(selectedStudent.name, appreciation);
+                                handleAppreciationGenerated(appreciation);
                                 toast.success("Appréciation générée avec succès");
                               } catch (error) {
                                 console.error("Error generating appreciation:", error);
