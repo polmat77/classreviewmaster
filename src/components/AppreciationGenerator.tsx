@@ -3,25 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Loader2, RefreshCw, Copy, Save, Frown, Meh, Smile } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OpenAIService } from '@/utils/openai-service';
 import { toast } from 'sonner';
+import FileUploader from './FileUploader';
 
 interface AppreciationGeneratorProps {
   type: 'class' | 'individual';
-  studentName?: string;
-  studentData?: any;
-  classData?: any;
   maxChars?: number;
   analysisData?: any;
   className?: string;
@@ -30,9 +19,6 @@ interface AppreciationGeneratorProps {
 
 const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   type,
-  studentName,
-  studentData,
-  classData,
   maxChars = 500,
   analysisData,
   className,
@@ -43,18 +29,17 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [appreciation, setAppreciation] = useState('');
   const [copied, setCopied] = useState(false);
+  const [classReportFiles, setClassReportFiles] = useState<File[]>([]);
   
-  // Générer automatiquement l'appréciation au chargement du composant
   useEffect(() => {
-    if ((analysisData || studentData || classData) && !appreciation) {
+    if ((analysisData || classReportFiles.length > 0) && !appreciation) {
       generateAppreciation();
     }
-  }, [analysisData, studentData, classData]);
+  }, [analysisData, classReportFiles]);
   
   const generateAppreciation = async () => {
-    // Check if we have analysis data
-    if (!analysisData && !studentData && !classData) {
-      toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer et analyser des fichiers.");
+    if (!analysisData && classReportFiles.length === 0) {
+      toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer des fichiers.");
       return;
     }
     
@@ -63,35 +48,14 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
     try {
       let result = '';
       
-      if (type === 'class') {
-        // Use actual analysis data with a preference for analysisData over classData
-        const dataToUse = analysisData || classData;
-        console.log("Using class data for OpenAI:", dataToUse);
-        
-        result = await OpenAIService.generateClassAppreciation(
-          dataToUse,
-          tone,
-          length[0]
-        );
-      } else {
-        // Generate individual appreciation using OpenAI
-        if (!studentName) {
-          throw new Error('Données élève manquantes');
-        }
-        
-        // Use analysis data if available, otherwise use the mock student data
-        const dataForGeneration = analysisData ? 
-          { ...studentData, analysisData } : 
-          studentData;
-        
-        console.log("Using student data for OpenAI:", { studentName, data: dataForGeneration });
-        result = await OpenAIService.generateStudentAppreciation(
-          studentName,
-          dataForGeneration,
-          tone,
-          length[0]
-        );
-      }
+      const dataToUse = analysisData || classReportFiles;
+      console.log("Using class data for OpenAI:", dataToUse);
+      
+      result = await OpenAIService.generateClassAppreciation(
+        dataToUse,
+        tone,
+        length[0]
+      );
       
       setAppreciation(result);
       if (onAppreciationGenerated) {
@@ -113,88 +77,51 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Custom icons based on tone
-  const getToneIcon = (toneValue: string) => {
-    switch(toneValue) {
-      case 'exigeant': return <Frown className="h-5 w-5" />;
-      case 'neutre': return <Meh className="h-5 w-5" />;
-      case 'dithyrambique': return <Smile className="h-5 w-5" />;
-      default: return <Meh className="h-5 w-5" />;
-    }
+  const handleFileUpload = (files: File[]) => {
+    setClassReportFiles(files);
+    // Optional: trigger file analysis here if needed
   };
 
   return (
     <Card className={cn("w-full max-w-2xl mx-auto", className)}>
       <CardContent className="pt-6 space-y-8">
         <div>
-          <h1 className="text-3xl font-bold mb-6">Générateur d'appréciations</h1>
+          <h1 className="text-3xl font-bold mb-6">Générateur d'appréciations de classe</h1>
           
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl mb-4">Sélectionnez un élève ou la classe entière</h2>
-              <Select
-                value={studentName}
-                onValueChange={(value) => {
-                  // Cette fonction sera gérée par le composant parent
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choisir un élève" />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Les élèves seront injectés par le composant parent */}
-                  <SelectItem value="class">Classe entière</SelectItem>
-                </SelectContent>
-              </Select>
+              <h2 className="text-xl mb-4">Importer les bulletins de classe</h2>
+              <FileUploader 
+                onFilesAccepted={handleFileUpload}
+                acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
+                maxFiles={3}
+                label="Importer les bulletins de classe"
+                description="Formats acceptés: PDF, CSV, Excel (XLSX, XLS)"
+              />
             </div>
 
             <div className="space-y-4">
-              <h2 className="text-xl">Ton de l'appréciation:</h2>
+              <h2 className="text-xl">Ton de l'appréciation :</h2>
               <div className="flex flex-wrap gap-4 justify-center">
-                <Button 
-                  variant={tone === "exigeant" ? "default" : "outline"}
-                  size="lg"
-                  className="flex flex-col h-auto py-4 px-6 transition-all"
-                  onClick={() => setTone("exigeant")}
-                >
-                  <Frown className={cn(
-                    "h-8 w-8 mb-2 transition-colors",
-                    tone === "exigeant" ? "text-white" : "text-muted-foreground"
-                  )} />
-                  <span>Exigeant</span>
-                </Button>
-                
-                <Button 
-                  variant={tone === "neutre" ? "default" : "outline"}
-                  size="lg"
-                  className="flex flex-col h-auto py-4 px-6 transition-all"
-                  onClick={() => setTone("neutre")}
-                >
-                  <Meh className={cn(
-                    "h-8 w-8 mb-2 transition-colors",
-                    tone === "neutre" ? "text-white" : "text-muted-foreground"
-                  )} />
-                  <span>Neutre</span>
-                </Button>
-                
-                <Button 
-                  variant={tone === "dithyrambique" ? "default" : "outline"}
-                  size="lg"
-                  className="flex flex-col h-auto py-4 px-6 transition-all"
-                  onClick={() => setTone("dithyrambique")}
-                >
-                  <Smile className={cn(
-                    "h-8 w-8 mb-2 transition-colors",
-                    tone === "dithyrambique" ? "text-white" : "text-muted-foreground"
-                  )} />
-                  <span>Dithyrambique</span>
-                </Button>
+                {['exigeant', 'neutre', 'dithyrambique'].map((toneOption) => (
+                  <Button 
+                    key={toneOption}
+                    variant={tone === toneOption ? "default" : "outline"}
+                    size="icon"
+                    className="h-16 w-16 rounded-full"
+                    onClick={() => setTone(toneOption)}
+                  >
+                    {toneOption === 'exigeant' && <Frown className="h-8 w-8" />}
+                    {toneOption === 'neutre' && <Meh className="h-8 w-8" />}
+                    {toneOption === 'dithyrambique' && <Smile className="h-8 w-8" />}
+                  </Button>
+                ))}
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl">Longueur:</h2>
+                <h2 className="text-xl">Longueur :</h2>
                 <span className="text-sm text-muted-foreground">
                   {length[0]}/{maxChars} caractères
                 </span>
@@ -211,7 +138,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
             <Button 
               onClick={generateAppreciation}
               className="w-full h-14 text-lg"
-              disabled={isGenerating}
+              disabled={isGenerating || (classReportFiles.length === 0 && !analysisData)}
             >
               {isGenerating ? (
                 <>
@@ -225,7 +152,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
 
             {appreciation && (
               <div className="space-y-4">
-                <h2 className="text-xl">Résultat:</h2>
+                <h2 className="text-xl">Résultat :</h2>
                 <div className="p-6 rounded-lg bg-white border min-h-[150px] text-lg">
                   {appreciation}
                 </div>
@@ -266,3 +193,4 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
 };
 
 export default AppreciationGenerator;
+
