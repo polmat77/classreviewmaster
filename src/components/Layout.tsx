@@ -18,7 +18,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isMobile = useIsMobile();
   
   const steps = [
-    { id: 1, name: 'Analyse des résultats', path: '/dashboard', icon: BarChart },
+    { id: 1, name: 'Analyse des résultats', path: '/analyse', icon: BarChart },
     { id: 2, name: 'Appréciation générale de classe', path: '/appreciation-generale', icon: MessageCircle },
     { id: 3, name: 'Appréciations individuelles', path: '/appreciations-individuelles', icon: UserCheck },
     { id: 4, name: 'Rapport final', path: '/rapport', icon: FileText },

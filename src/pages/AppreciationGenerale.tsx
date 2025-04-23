@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
@@ -134,6 +133,12 @@ const AppreciationGenerale = () => {
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
+            <AppreciationGenerator 
+              type="class"
+              analysisData={analysisData}
+              maxChars={500}
+            />
+            
             <div className="glass-panel p-5 space-y-5">
               <h2 className="text-lg font-medium">Importation des documents</h2>
               
@@ -188,31 +193,6 @@ const AppreciationGenerale = () => {
                 )}
               </div>
             </div>
-            
-            {isAnalyzing ? (
-              <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-                <h3 className="text-lg font-medium mb-2">Analyse en cours...</h3>
-                <p className="text-sm text-muted-foreground max-w-md">
-                  Nous traitons vos fichiers pour générer une analyse complète. 
-                  Veuillez patienter un instant.
-                </p>
-              </div>
-            ) : analysisData ? (
-              <AppreciationGenerator 
-                type="class"
-                analysisData={analysisData}
-                maxChars={500} // Updated from 255 to 500
-              />
-            ) : (
-              <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
-                <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Aucune analyse disponible</h3>
-                <p className="text-sm text-muted-foreground max-w-md">
-                  Importez un bulletin de classe et lancez l'analyse pour générer une appréciation.
-                </p>
-              </div>
-            )}
           </div>
           
           <div className="space-y-4">

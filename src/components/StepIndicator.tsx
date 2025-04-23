@@ -54,12 +54,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
     <div className={cn("w-full", className)}>
       <div className="hidden sm:flex items-center justify-between">
         {stepsWithIcons.map((step, i) => {
-          const status = i + 1 < currentStep 
-            ? 'complete' 
-            : i + 1 === currentStep 
-              ? 'current' 
-              : 'upcoming';
-          
+          const isActive = step.id === currentStep;
           const StepIcon = step.icon || BarChart;
           
           return (
@@ -67,28 +62,33 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
               <Link 
                 to={step.path}
                 className="relative flex flex-col items-center group"
-                aria-current={status === 'current' ? 'step' : undefined}
+                aria-current={isActive ? "step" : undefined}
               >
                 <div 
                   className={cn(
-                    "flex h-12 w-12 items-center justify-center rounded-full border-2 bg-background z-10 transition-all duration-300 group-hover:scale-105",
+                    "flex h-12 w-12 items-center justify-center rounded-full border-2 bg-background z-10 transition-all duration-300 group-hover:scale-105 shadow-sm",
+                    isActive 
+                      ? "border-primary bg-primary text-primary-foreground" 
+                      : "",
                     status === 'complete' ? "border-primary bg-primary text-primary-foreground" : "",
                     status === 'current' ? "border-primary text-primary" : "",
                     status === 'upcoming' ? "border-muted-foreground/30 text-muted-foreground/70 hover:border-muted-foreground/50 hover:text-muted-foreground" : "",
                   )}
                 >
-                  {step.icon ? <StepIcon className="h-5 w-5" /> : i + 1}
+                  <StepIcon className="h-5 w-5" aria-hidden="true" />
                 </div>
-                <p 
+                
+                <span 
                   className={cn(
                     "mt-2 text-sm font-medium text-center transition-colors max-w-28",
+                    isActive ? "text-primary" : "",
                     status === 'complete' ? "text-primary" : "",
                     status === 'current' ? "text-foreground" : "",
                     status === 'upcoming' ? "text-muted-foreground/70 group-hover:text-muted-foreground" : "",
                   )}
                 >
                   {step.name}
-                </p>
+                </span>
               </Link>
               
               {i < steps.length - 1 && (

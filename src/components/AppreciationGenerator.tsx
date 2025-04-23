@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, RefreshCw, Copy, Save } from 'lucide-react';
+import { Loader2, RefreshCw, Copy, Save, Frown, Meh, Smile } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OpenAIService } from '@/utils/openai-service';
 import { toast } from 'sonner';
@@ -42,6 +43,13 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [appreciation, setAppreciation] = useState('');
   const [copied, setCopied] = useState(false);
+  
+  // Générer automatiquement l'appréciation au chargement du composant
+  useEffect(() => {
+    if ((analysisData || studentData || classData) && !appreciation) {
+      generateAppreciation();
+    }
+  }, [analysisData, studentData, classData]);
   
   const generateAppreciation = async () => {
     // Check if we have analysis data
@@ -85,7 +93,6 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
         );
       }
       
-      // No longer truncating the text with "..." regardless of length
       setAppreciation(result);
       if (onAppreciationGenerated) {
         onAppreciationGenerated(result);
@@ -104,6 +111,16 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
     navigator.clipboard.writeText(appreciation);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Custom icons based on tone
+  const getToneIcon = (toneValue: string) => {
+    switch(toneValue) {
+      case 'exigeant': return <Frown className="h-5 w-5" />;
+      case 'neutre': return <Meh className="h-5 w-5" />;
+      case 'dithyrambique': return <Smile className="h-5 w-5" />;
+      default: return <Meh className="h-5 w-5" />;
+    }
   };
 
   return (
@@ -133,24 +150,46 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
 
             <div className="space-y-4">
               <h2 className="text-xl">Ton de l'appréciation:</h2>
-              <RadioGroup
-                value={tone}
-                onValueChange={setTone}
-                className="flex gap-8"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="exigeant" id="exigeant" />
-                  <Label htmlFor="exigeant">Exigeant</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="neutre" id="neutre" />
-                  <Label htmlFor="neutre">Neutre</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="dithyrambique" id="dithyrambique" />
-                  <Label htmlFor="dithyrambique">Dithyrambique</Label>
-                </div>
-              </RadioGroup>
+              <div className="flex flex-wrap gap-4 justify-center">
+                <Button 
+                  variant={tone === "exigeant" ? "default" : "outline"}
+                  size="lg"
+                  className="flex flex-col h-auto py-4 px-6 transition-all"
+                  onClick={() => setTone("exigeant")}
+                >
+                  <Frown className={cn(
+                    "h-8 w-8 mb-2 transition-colors",
+                    tone === "exigeant" ? "text-white" : "text-muted-foreground"
+                  )} />
+                  <span>Exigeant</span>
+                </Button>
+                
+                <Button 
+                  variant={tone === "neutre" ? "default" : "outline"}
+                  size="lg"
+                  className="flex flex-col h-auto py-4 px-6 transition-all"
+                  onClick={() => setTone("neutre")}
+                >
+                  <Meh className={cn(
+                    "h-8 w-8 mb-2 transition-colors",
+                    tone === "neutre" ? "text-white" : "text-muted-foreground"
+                  )} />
+                  <span>Neutre</span>
+                </Button>
+                
+                <Button 
+                  variant={tone === "dithyrambique" ? "default" : "outline"}
+                  size="lg"
+                  className="flex flex-col h-auto py-4 px-6 transition-all"
+                  onClick={() => setTone("dithyrambique")}
+                >
+                  <Smile className={cn(
+                    "h-8 w-8 mb-2 transition-colors",
+                    tone === "dithyrambique" ? "text-white" : "text-muted-foreground"
+                  )} />
+                  <span>Dithyrambique</span>
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-4">

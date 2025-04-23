@@ -24,6 +24,7 @@ function App() {
         <Route path="/" element={<Index />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/analyse" element={<Analyse />} />
+        <Route path="/dashboard" element={<Analyse />} /> {/* Route alternative pour assurer la compatibilité */}
         <Route path="/appreciation-generale" element={<AppreciationGenerale />} />
         <Route path="/appreciations-individuelles" element={<AppreciationsIndividuelles />} />
         <Route path="/rapport" element={<Rapport />} />
