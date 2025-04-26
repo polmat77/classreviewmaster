@@ -25,6 +25,17 @@ interface StudentData {
   }>;
 }
 
+interface BulletinMatiere {
+  note?: number;
+  appreciation?: string;
+}
+
+interface Bulletin {
+  nom?: string;
+  moyenne_generale?: number;
+  matieres: Record<string, BulletinMatiere>;
+}
+
 const AppreciationsIndividuelles = () => {
   const [tone, setTone] = useState('neutre');
   const [length, setLength] = useState([250]);
@@ -63,7 +74,7 @@ const AppreciationsIndividuelles = () => {
         }
         
         // Transform bulletin data into student data
-        const extractedStudents = bulletins.map((bulletin, index) => ({
+        const extractedStudents = bulletins.map((bulletin: Bulletin, index: number) => ({
           id: `student-${index}`,
           name: bulletin.nom || `Élève ${index + 1}`,
           average: bulletin.moyenne_generale || 0,
@@ -126,7 +137,6 @@ const AppreciationsIndividuelles = () => {
       setAppreciation(generatedAppreciation);
       
       toast({
-        title: "Appréciation générée",
         description: "L'appréciation a été générée avec succès."
       });
     } catch (error) {
@@ -294,7 +304,6 @@ const AppreciationsIndividuelles = () => {
                         onCopy={() => {
                           navigator.clipboard.writeText(appreciation);
                           toast({
-                            title: "Copié !",
                             description: "L'appréciation a été copiée dans le presse-papiers."
                           });
                         }}
