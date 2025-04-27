@@ -1,3 +1,4 @@
+
 // src/services/aiAnalysisService.ts
 
 /**
@@ -5,7 +6,65 @@
  */
 
 interface AnalysisRequest {
-  classData: any[];  // Ajouter des instructions de guidage pour l'IA
+  classData: any[];  // Formatted class data for analysis
+  trimesters: string[];  // List of trimesters being analyzed
+}
+
+interface AnalysisResponse {
+  summary: string;
+  recommendations?: string;
+  detailedAnalysis?: string;
+  error?: string;
+}
+
+// Base URL for the AI service (can be configured based on environment)
+// This would typically point to your backend or a service like Supabase Functions
+const API_URL = import.meta.env.VITE_AI_API_URL || '/api/ai-analysis';
+
+/**
+ * Formats the class data into a prompt for the AI
+ */
+const formatPromptForAI = (data: AnalysisRequest): string => {
+  // Create a structured text prompt with the data
+  const { classData, trimesters } = data;
+  
+  // Start with general instructions
+  let prompt = `Analyse les résultats scolaires suivants pour une classe sur ${trimesters.length} trimestre(s): ${trimesters.join(', ')}.\n\n`;
+  
+  // Add class averages
+  prompt += "MOYENNES DE CLASSE PAR TRIMESTRE:\n";
+  trimesters.forEach(trimester => {
+    const trimData = classData.find(d => d.trimester === trimester);
+    if (trimData) {
+      prompt += `${trimester}: ${trimData.averages.classAverage.toFixed(2)}/20\n`;
+    }
+  });
+  
+  // Add distribution data
+  prompt += "\nRÉPARTITION DES ÉLÈVES PAR TRANCHES DE NOTES:\n";
+  trimesters.forEach(trimester => {
+    const trimData = classData.find(d => d.trimester === trimester);
+    if (trimData) {
+      prompt += `${trimester}:\n`;
+      trimData.averages.rangeDistribution.forEach((range: any) => {
+        prompt += `- ${range.range}: ${range.count} élèves (${range.percentage}%)\n`;
+      });
+    }
+  });
+  
+  // Add subject averages
+  prompt += "\nMOYENNES PAR MATIÈRE:\n";
+  trimesters.forEach(trimester => {
+    const trimData = classData.find(d => d.trimester === trimester);
+    if (trimData) {
+      prompt += `${trimester}:\n`;
+      Object.entries(trimData.averages.subjects).forEach(([subject, average]) => {
+        prompt += `- ${subject}: ${(average as number).toFixed(2)}/20\n`;
+      });
+    }
+  });
+  
+  // Add instructions for analysis
   prompt += "\nINSTRUCTIONS D'ANALYSE:\n";
   prompt += "1. Fournir un résumé général de l'évolution de la classe sur la période donnée.\n";
   prompt += "2. Analyser l'évolution de la moyenne générale de la classe.\n";
@@ -52,7 +111,7 @@ export const sendAnalysisRequest = async (data: AnalysisRequest): Promise<Analys
       summary: result.text,
       // Autres champs pourraient être remplis selon la réponse de l'API
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur lors de l\'analyse IA:', error);
     return {
       summary: "",
@@ -116,7 +175,7 @@ export const getSimulatedAnalysis = (data: AnalysisRequest): AnalysisResponse =>
   if (lastTrimData) {
     const subjects = Object.entries(lastTrimData.averages.subjects)
       .filter(([subject]) => subject !== 'MOYENNE')
-      .sort(([, a], [, b]) => b as number - (a as number));
+      .sort(([, a], [, b]) => (b as number) - (a as number));
     
     // Matières avec les meilleures moyennes
     summary += `### Points forts de la classe\n`;
@@ -163,62 +222,4 @@ export const getSimulatedAnalysis = (data: AnalysisRequest): AnalysisResponse =>
     summary,
     recommendations: "Ces recommandations sont basées sur une analyse automatique des données et devraient être adaptées selon votre connaissance de la classe."
   };
-}; Formatted class data for analysis
-  trimesters: string[];  // List of trimesters being analyzed
-}
-
-interface AnalysisResponse {
-  summary: string;
-  recommendations?: string;
-  detailedAnalysis?: string;
-  error?: string;
-}
-
-// Base URL for the AI service (can be configured based on environment)
-// This would typically point to your backend or a service like Supabase Functions
-const API_URL = import.meta.env.VITE_AI_API_URL || '/api/ai-analysis';
-
-/**
- * Formats the class data into a prompt for the AI
- */
-const formatPromptForAI = (data: AnalysisRequest): string => {
-  // Create a structured text prompt with the data
-  const { classData, trimesters } = data;
-  
-  // Start with general instructions
-  let prompt = `Analyse les résultats scolaires suivants pour une classe sur ${trimesters.length} trimestre(s): ${trimesters.join(', ')}.\n\n`;
-  
-  // Add class averages
-  prompt += "MOYENNES DE CLASSE PAR TRIMESTRE:\n";
-  trimesters.forEach(trimester => {
-    const trimData = classData.find(d => d.trimester === trimester);
-    if (trimData) {
-      prompt += `${trimester}: ${trimData.averages.classAverage.toFixed(2)}/20\n`;
-    }
-  });
-  
-  // Add distribution data
-  prompt += "\nRÉPARTITION DES ÉLÈVES PAR TRANCHES DE NOTES:\n";
-  trimesters.forEach(trimester => {
-    const trimData = classData.find(d => d.trimester === trimester);
-    if (trimData) {
-      prompt += `${trimester}:\n`;
-      trimData.averages.rangeDistribution.forEach((range: any) => {
-        prompt += `- ${range.range}: ${range.count} élèves (${range.percentage}%)\n`;
-      });
-    }
-  });
-  
-  // Add subject averages
-  prompt += "\nMOYENNES PAR MATIÈRE:\n";
-  trimesters.forEach(trimester => {
-    const trimData = classData.find(d => d.trimester === trimester);
-    if (trimData) {
-      prompt += `${trimester}:\n`;
-      Object.entries(trimData.averages.subjects).forEach(([subject, average]) => {
-        prompt += `- ${subject}: ${(average as number).toFixed(2)}/20\n`;
-      });
-    }
-  });
-  
-  //
+};
