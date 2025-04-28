@@ -1,3 +1,4 @@
+
 // src/utils/ai/apiClient.ts
 
 import { AnalysisRequest, AnalysisResponse, AIApiRequest, AIApiResponse } from './types';
@@ -35,7 +36,7 @@ export const sendAnalysisRequest = async (data: AnalysisRequest): Promise<Analys
     
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Erreur lors de la communication avec l'API');
+      throw new Error(errorData.error || 'Erreur lors de la communication avec l\'API');
     }
     
     const result: AIApiResponse = await response.json();

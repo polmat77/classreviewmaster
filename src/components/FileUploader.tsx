@@ -1,7 +1,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, File, X, CheckCircle } from 'lucide-react';
+import { Upload, File, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -26,6 +26,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [files, setFiles] = useState<File[]>([]);
+  const [validationError, setValidationError] = useState<string | null>(null);
   
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -38,6 +39,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     
     setIsValidating(true);
     setProgress(0);
+    setValidationError(null);
     
     try {
       // Validate PDF files
@@ -45,10 +47,34 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       
       for (let i = 0; i < pdfFiles.length; i++) {
         const file = pdfFiles[i];
-        const validationResult = await validatePdfFile(file);
+        console.log(`Validation du fichier ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
         
-        if (!validationResult.isValid) {
-          toast.error(`Validation échouée pour ${file.name}: ${validationResult.reason}`);
+        // Tentatives avec délai croissant en cas d'échec
+        let attempt = 1;
+        let validationResult;
+        const maxAttempts = 2;
+        
+        while (attempt <= maxAttempts) {
+          try {
+            validationResult = await validatePdfFile(file);
+            break; // Si ça réussit, sortir de la boucle
+          } catch (error) {
+            console.warn(`Tentative ${attempt}/${maxAttempts} échouée pour ${file.name}:`, error);
+            
+            if (attempt === maxAttempts) {
+              throw error; // Remonter l'erreur si toutes les tentatives ont échoué
+            }
+            
+            // Attendre avant une nouvelle tentative (délai exponentiel)
+            await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+            attempt++;
+          }
+        }
+        
+        if (!validationResult?.isValid) {
+          const errorMsg = `Validation échouée pour ${file.name}: ${validationResult?.reason || "Erreur inconnue"}`;
+          setValidationError(errorMsg);
+          toast.error(errorMsg);
           setIsValidating(false);
           return;
         }
@@ -66,10 +92,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       toast.success(`${acceptedFiles.length} fichier(s) ajouté(s) avec succès`);
     } catch (error) {
       console.error('Error validating files:', error);
-      toast.error(`Erreur lors de la validation des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      const errorMsg = `Erreur lors de la validation des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
+      setValidationError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setIsValidating(false);
-      setProgress(0);
     }
   }, [files, maxFiles, onFilesAccepted]);
 
@@ -119,6 +146,20 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             <div className="text-sm font-medium">{Math.round(progress)}%</div>
           </div>
           <Progress value={progress} className="h-2" />
+          <p className="text-xs text-muted-foreground">Les fichiers volumineux peuvent prendre du temps à valider</p>
+        </div>
+      )}
+      
+      {validationError && (
+        <div className="bg-destructive/10 border border-destructive/30 p-3 rounded-md flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-destructive">Erreur de validation</p>
+            <p className="text-xs text-destructive/90">{validationError}</p>
+            <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => setValidationError(null)}>
+              Réessayer avec un autre fichier
+            </Button>
+          </div>
         </div>
       )}
       
@@ -134,6 +175,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 <div className="flex items-center gap-2">
                   <File className="h-4 w-4 text-primary" />
                   <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({(file.size / (1024 * 1024)).toFixed(1)} MB)
+                  </span>
                 </div>
                 <Button
                   variant="ghost"

@@ -207,11 +207,11 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
       const arrayBuffer = await file.arrayBuffer();
       const loadPromise = pdfjs.getDocument({ data: arrayBuffer }).promise;
       
-      // Ajouter un timeout de 10 secondes pour l'ouverture du PDF
+      // Ajouter un timeout de 20 secondes pour l'ouverture du PDF (augmenté de 10 à 20)
       const pdf = await Promise.race([
         loadPromise,
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error("Délai d'ouverture du PDF dépassé")), 10000)
+          setTimeout(() => reject(new Error("Délai d'ouverture du PDF dépassé")), 20000)
         )
       ]);
       
@@ -236,6 +236,7 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
       
       return { isValid: true };
     } catch (error) {
+      console.error("Erreur lors de la validation du PDF:", error);
       return {
         isValid: false,
         reason: `Le PDF n'a pas pu être validé: ${error instanceof Error ? error.message : 'Erreur inconnue'}`

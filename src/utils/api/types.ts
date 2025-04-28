@@ -1,55 +1,40 @@
+
 // src/utils/ai/types.ts
 
 /**
- * Types pour le service d'analyse IA
+ * Types utilisés dans le service d'analyse IA
  */
 
-export interface Student {
-  id: string;
-  name: string;
-  average: number;
-  subjects: Record<string, number>;
-}
-
-export interface RangeDistribution {
-  range: string;
-  count: number;
-  percentage: number;
-}
-
-export interface ClassAverages {
-  classAverage: number;
-  subjects: Record<string, number>;
-  rangeDistribution: RangeDistribution[];
-}
-
-export interface TrimesterData {
-  trimester: string;
-  data: Student[];
-  averages: ClassAverages;
-}
-
+/** Requête d'analyse à traiter */
 export interface AnalysisRequest {
-  classData: TrimesterData[];
-  trimesters: string[];
+  classData: any[];  // Données de classe formatées pour l'analyse
+  trimesters: string[];  // Liste des trimestres à analyser
 }
 
+/** Réponse d'analyse générée */
 export interface AnalysisResponse {
-  summary: string;
-  recommendations?: string;
-  detailedAnalysis?: string;
-  error?: string;
+  summary: string;  // Résumé de l'analyse
+  recommendations?: string;  // Recommandations optionnelles
+  detailedAnalysis?: string;  // Analyse détaillée optionnelle
+  error?: string;  // Message d'erreur en cas de problème
 }
 
+/** Requête formatée pour l'API IA externe */
 export interface AIApiRequest {
-  prompt: string;
-  systemMessage: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
+  prompt: string;  // Texte du prompt
+  systemMessage: string;  // Message système pour définir le comportement de l'IA
+  model: string;  // Modèle à utiliser (ex: "gpt-4o-mini")
+  temperature: number;  // Température de génération
+  maxTokens: number;  // Nombre maximum de tokens à générer
 }
 
+/** Réponse de l'API IA externe */
 export interface AIApiResponse {
-  text: string;
-  error?: string;
+  text: string;  // Texte généré par l'IA
+  usage?: {  // Informations d'utilisation (optionnelles)
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
+  error?: string;  // Message d'erreur en cas de problème
 }
