@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,7 +46,7 @@ const AIAnalysisComponent: React.FC<AIAnalysisProps> = ({ analysisData, isDisabl
       // Afficher le résultat
       setAnalysisResult(result.summary);
       toast.success('Analyse générée avec succès');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erreur lors de la génération de l\'analyse:', err);
       setError(err.message || 'Une erreur est survenue lors de l\'analyse');
       toast.error('Erreur lors de la génération de l\'analyse');

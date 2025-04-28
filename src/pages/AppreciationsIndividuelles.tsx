@@ -36,6 +36,13 @@ interface Bulletin {
   matieres: Record<string, BulletinMatiere>;
 }
 
+// Interface to match what processMultiBulletins returns
+interface BulletinData {
+  nom?: string;
+  moyenne_generale?: number;
+  matieres: Record<string, number>;
+}
+
 const AppreciationsIndividuelles = () => {
   const [tone, setTone] = useState('neutre');
   const [length, setLength] = useState([250]);
@@ -74,17 +81,22 @@ const AppreciationsIndividuelles = () => {
         }
         
         // Transform bulletin data into student data
-        const extractedStudents = bulletins.map((bulletin: Bulletin, index: number) => ({
-          id: `student-${index}`,
-          name: bulletin.nom || `Élève ${index + 1}`,
-          average: bulletin.moyenne_generale || 0,
-          category: getCategoryFromAverage(bulletin.moyenne_generale || 0),
-          subjects: Object.entries(bulletin.matieres).map(([name, data]) => ({
+        const extractedStudents = bulletins.map((bulletin: BulletinData, index: number) => {
+          // Convert from BulletinData to the format needed for StudentData
+          const studentSubjects = Object.entries(bulletin.matieres || {}).map(([name, grade]) => ({
             name,
-            grade: data.note || 0,
-            comment: data.appreciation || ''
-          }))
-        }));
+            grade: grade || 0,
+            comment: ''
+          }));
+          
+          return {
+            id: `student-${index}`,
+            name: bulletin.nom || `Élève ${index + 1}`,
+            average: bulletin.moyenne_generale || 0,
+            category: getCategoryFromAverage(bulletin.moyenne_generale || 0),
+            subjects: studentSubjects
+          };
+        });
         
         console.log(`Extracted ${extractedStudents.length} students from bulletins`);
         setStudents(extractedStudents);
@@ -94,7 +106,8 @@ const AppreciationsIndividuelles = () => {
         }
       } catch (error) {
         console.error("Error processing files:", error);
-        toast.error(`Erreur lors du traitement des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+        const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+        toast.error(`Erreur lors du traitement des fichiers: ${errorMessage}`);
       } finally {
         setIsProcessing(false);
       }
@@ -136,12 +149,11 @@ const AppreciationsIndividuelles = () => {
       
       setAppreciation(generatedAppreciation);
       
-      toast({
-        description: "L'appréciation a été générée avec succès."
-      });
+      toast.success("L'appréciation a été générée avec succès.");
     } catch (error) {
       console.error("Error generating appreciation:", error);
-      toast.error(`Erreur lors de la génération de l'appréciation: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast.error(`Erreur lors de la génération de l'appréciation: ${errorMessage}`);
       setAppreciation("Impossible de générer l'appréciation. Veuillez réessayer.");
     } finally {
       setIsGenerating(false);
@@ -303,9 +315,7 @@ const AppreciationsIndividuelles = () => {
                         onRegenerate={handleGenerateAppreciation}
                         onCopy={() => {
                           navigator.clipboard.writeText(appreciation);
-                          toast({
-                            description: "L'appréciation a été copiée dans le presse-papiers."
-                          });
+                          toast.success("L'appréciation a été copiée dans le presse-papiers.");
                         }}
                       />
                     )}

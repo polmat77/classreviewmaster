@@ -1,4 +1,4 @@
-cat > src/components/ThemeProvider.tsx << 'EOF'
+
 import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "dark" | "light" | "system";
@@ -73,4 +73,3 @@ export const useTheme = () => {
 
   return context;
 };
-EOF
