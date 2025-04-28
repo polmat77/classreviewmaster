@@ -1,23 +1,15 @@
-// src/utils/ai/simulatedData.ts
 
 import { AnalysisRequest, AnalysisResponse } from './types';
 
 /**
- * Génère une analyse simulée pour les tests sans API
- * @param data Données de classe pour l'analyse
+ * Génère une analyse simulée pour les tests et le développement
+ * @param data Données de classe
  * @returns Réponse d'analyse simulée
  */
 export const getSimulatedAnalysis = (data: AnalysisRequest): AnalysisResponse => {
   const { classData, trimesters } = data;
   
-  if (!trimesters.length || !classData.length) {
-    return {
-      summary: "Aucune donnée disponible pour l'analyse.",
-      error: "Données insuffisantes"
-    };
-  }
-  
-  // Simulation d'une analyse basique
+  // Simuler une analyse basique
   let summary = `# Analyse des résultats de la classe\n\n`;
   
   // Évolution de la moyenne générale

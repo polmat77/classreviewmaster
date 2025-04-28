@@ -1,40 +1,33 @@
 
-// src/utils/ai/types.ts
-
 /**
- * Types utilisés dans le service d'analyse IA
+ * Types pour les services d'analyse IA
  */
 
-/** Requête d'analyse à traiter */
+// Interface pour les données de requête d'analyse
 export interface AnalysisRequest {
-  classData: any[];  // Données de classe formatées pour l'analyse
-  trimesters: string[];  // Liste des trimestres à analyser
+  classData: any[];
+  trimesters: string[];
 }
 
-/** Réponse d'analyse générée */
+// Interface pour la réponse d'analyse
 export interface AnalysisResponse {
-  summary: string;  // Résumé de l'analyse
-  recommendations?: string;  // Recommandations optionnelles
-  detailedAnalysis?: string;  // Analyse détaillée optionnelle
-  error?: string;  // Message d'erreur en cas de problème
+  summary: string;
+  recommendations?: string;
+  detailedAnalysis?: string;
+  error?: string;
 }
 
-/** Requête formatée pour l'API IA externe */
+// Interface pour la requête API vers l'IA
 export interface AIApiRequest {
-  prompt: string;  // Texte du prompt
-  systemMessage: string;  // Message système pour définir le comportement de l'IA
-  model: string;  // Modèle à utiliser (ex: "gpt-4o-mini")
-  temperature: number;  // Température de génération
-  maxTokens: number;  // Nombre maximum de tokens à générer
+  prompt: string;
+  systemMessage: string;
+  model: string;
+  temperature: number;
+  maxTokens?: number;
 }
 
-/** Réponse de l'API IA externe */
+// Interface pour la réponse API de l'IA
 export interface AIApiResponse {
-  text: string;  // Texte généré par l'IA
-  usage?: {  // Informations d'utilisation (optionnelles)
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-  };
-  error?: string;  // Message d'erreur en cas de problème
+  text: string;
+  error?: string;
 }

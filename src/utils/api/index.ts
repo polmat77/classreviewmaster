@@ -1,6 +1,4 @@
 
-// src/utils/ai/index.ts
-
 /**
  * Point d'entrée pour le service d'analyse IA
  */

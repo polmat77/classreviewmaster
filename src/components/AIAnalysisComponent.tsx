@@ -6,8 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { BrainCircuit, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { getSimulatedAnalysis } from '@/utils/aiAnalysisService';
 import ReactMarkdown from 'react-markdown';
+import { analyzeClassData } from '@/utils/api';
 
 interface AIAnalysisProps {
   analysisData: any[];
@@ -35,9 +35,10 @@ const AIAnalysisComponent: React.FC<AIAnalysisProps> = ({ analysisData, isDisabl
         trimesters: analysisData.map(data => data.trimester)
       };
 
-      // Utiliser la fonction simulée pour l'instant
-      // Dans une version production, vous utiliseriez sendAnalysisRequest
-      const result = getSimulatedAnalysis(requestData);
+      console.log('Demande d\'analyse pour les trimestres:', requestData.trimesters);
+      
+      // Utiliser l'API centralisée pour l'analyse
+      const result = await analyzeClassData(requestData, false);
 
       if (result.error) {
         throw new Error(result.error);
