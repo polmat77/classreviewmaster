@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
 import FileUploader from '@/components/FileUploader';
+import ProgressIndicator from '@/components/ProgressIndicator';
 import { KeyRound, Lightbulb, AlertCircle, TrendingUp, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { processGradeFiles, savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
@@ -12,6 +13,15 @@ const AppreciationGenerale = () => {
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [previousFiles, setPreviousFiles] = useState<any[]>([]);
+  
+  const [analysisStep, setAnalysisStep] = useState(0);
+  const analysisSteps = [
+    "Chargement des fichiers...",
+    "Extraction des données...", 
+    "Analyse des résultats...",
+    "Préparation des recommandations...",
+    "Analyse terminée"
+  ];
 
   useEffect(() => {
     const savedFiles = getPreviousGradeFiles();
@@ -35,10 +45,20 @@ const AppreciationGenerale = () => {
     }
 
     setIsAnalyzing(true);
+    setAnalysisStep(1);
+    
     try {
+      const simulateStep = async (step: number, delay: number) => {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setAnalysisStep(step);
+      };
+      
       const timeoutId = setTimeout(() => {
         toast.info("L'analyse des fichiers prend plus de temps que prévu...");
       }, 5000);
+      
+      await simulateStep(1, 800);
+      await simulateStep(2, 1500);
       
       const allFiles = [...filesToAnalyze];
       if (previousFiles && previousFiles.length > 0) {
@@ -46,8 +66,14 @@ const AppreciationGenerale = () => {
         toast.info("Utilisation des données historiques pour l'analyse comparative");
       }
       
+      await simulateStep(3, 1200);
+      
       console.log("Starting analysis with files:", allFiles);
       const data = await processGradeFiles(allFiles);
+      
+      await simulateStep(4, 1000);
+      await simulateStep(5, 500);
+      
       clearTimeout(timeoutId);
       
       console.log("Analysis results:", data);
@@ -67,6 +93,8 @@ const AppreciationGenerale = () => {
         setAnalysisData(mockData);
         toast.info("Données de démonstration générées pour visualisation");
       }
+      
+      setAnalysisStep(0);
     } finally {
       setIsAnalyzing(false);
     }
@@ -166,6 +194,17 @@ const AppreciationGenerale = () => {
                         Les données des trimestres précédents seront incluses dans l'analyse
                       </span>
                     </div>
+                  </div>
+                )}
+                
+                {isAnalyzing && analysisStep > 0 && (
+                  <div className="mt-4">
+                    <ProgressIndicator 
+                      currentStep={analysisStep} 
+                      totalSteps={analysisSteps.length - 1}
+                      steps={analysisSteps}
+                      isLoading={analysisStep < analysisSteps.length - 1}
+                    />
                   </div>
                 )}
                 

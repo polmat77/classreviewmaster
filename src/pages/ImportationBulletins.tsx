@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useNavigate } from 'react-router-dom';
 import FileUploader from '@/components/FileUploader';
+import ProgressIndicator from '@/components/ProgressIndicator';
 import BulletinMappingInterfaceV2 from '@/components/BulletinMappingInterfaceV2';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -27,7 +27,23 @@ const ImportationBulletins: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [showMapping, setShowMapping] = useState<boolean>(false);
   
-  // Gérer l'upload d'un fichier PDF
+  const [extractionStep, setExtractionStep] = useState(0);
+  const extractionSteps = [
+    "Lecture du fichier...",
+    "Extraction du contenu...", 
+    "Préparation des données...",
+    "Extraction terminée"
+  ];
+  
+  const [processingStep, setProcessingStep] = useState(0);
+  const processingSteps = [
+    "Traitement des données...",
+    "Analyse des informations...", 
+    "Préparation des résultats...",
+    "Finalisation...",
+    "Traitement terminé"
+  ];
+  
   const handlePdfUploaded = async (files: File[]) => {
     if (!files || files.length === 0) return;
     
@@ -37,11 +53,9 @@ const ImportationBulletins: React.FC = () => {
     setMappedData(null);
     setShowMapping(false);
     
-    // Extraire le texte automatiquement
     await extractPdfText(file);
   };
   
-  // Gérer l'upload d'un fichier Excel/CSV
   const handleTabularFileUploaded = async (files: File[]) => {
     if (!files || files.length === 0) return;
     
@@ -51,53 +65,85 @@ const ImportationBulletins: React.FC = () => {
     setMappedData(null);
     setShowMapping(false);
     
-    // Parser le fichier automatiquement
     await parseFile(file);
   };
   
-  // Extraire le texte du PDF
   const extractPdfText = async (file: File) => {
     setIsExtracting(true);
+    setExtractionStep(1);
+    
     try {
+      const simulateStep = async (step: number, delay: number) => {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setExtractionStep(step);
+      };
+      
+      await simulateStep(1, 800);
+      await simulateStep(2, 1200);
+      
       const text = await extractTextFromPDF(file, (progress) => {
-        // On pourrait afficher la progression ici
+        console.log("Extraction progress:", progress);
       });
+      
+      await simulateStep(3, 1000);
+      await simulateStep(4, 500);
+      
       setPdfText(text);
       toast.success('Extraction du texte terminée');
       setShowMapping(true);
     } catch (error) {
       console.error('Erreur lors de l\'extraction du texte:', error);
       toast.error(`Erreur lors de l'extraction: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      setExtractionStep(0);
     } finally {
       setIsExtracting(false);
     }
   };
   
-  // Parser un fichier Excel/CSV
   const parseFile = async (file: File) => {
     setIsParsing(true);
+    setExtractionStep(1);
+    
     try {
+      const simulateStep = async (step: number, delay: number) => {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setExtractionStep(step);
+      };
+      
+      await simulateStep(1, 800);
+      await simulateStep(2, 1200);
+      
       const data = await parseTabularFile(file);
+      
+      await simulateStep(3, 1000);
+      await simulateStep(4, 500);
+      
       setTabularData(data);
       toast.success('Fichier analysé avec succès');
       setShowMapping(true);
     } catch (error) {
       console.error('Erreur lors du parsing du fichier:', error);
       toast.error(`Erreur lors de l'analyse: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      setExtractionStep(0);
     } finally {
       setIsParsing(false);
     }
   };
   
-  // Gérer la fin du mapping
   const handleMappingComplete = async (data: any) => {
     setMappedData(data);
+    setIsProcessing(true);
+    setProcessingStep(1);
     
-    // Préparer les données pour le traitement par processGradeFiles
     try {
-      setIsProcessing(true);
+      const simulateStep = async (step: number, delay: number) => {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setProcessingStep(step);
+      };
       
-      // Créer un "faux" fichier pour le traitement
+      await simulateStep(1, 800);
+      await simulateStep(2, 1200);
+      
       const processedData = await processGradeFiles([
         new File(
           [JSON.stringify(data)], 
@@ -106,18 +152,21 @@ const ImportationBulletins: React.FC = () => {
         )
       ]);
       
-      // Stocker les données dans le localStorage pour les récupérer dans d'autres pages
+      await simulateStep(3, 1000);
+      await simulateStep(4, 800);
+      await simulateStep(5, 500);
+      
       localStorage.setItem('analysisData', JSON.stringify(processedData));
       
       toast.success('Analyse terminée avec succès');
       
-      // Rediriger vers la page d'analyse
       navigate('/appreciation-generale', { 
         state: { analysisData: processedData }
       });
     } catch (error) {
       console.error('Erreur lors du traitement final:', error);
       toast.error(`Erreur lors de l'analyse finale: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      setProcessingStep(0);
     } finally {
       setIsProcessing(false);
     }
@@ -160,10 +209,14 @@ const ImportationBulletins: React.FC = () => {
                 description="Glissez-déposez votre fichier PDF ou cliquez pour parcourir"
               />
               
-              {isExtracting && (
-                <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-md flex items-center justify-center space-x-3">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                  <span className="text-sm">Extraction du texte en cours...</span>
+              {isExtracting && extractionStep > 0 && (
+                <div className="mt-4">
+                  <ProgressIndicator 
+                    currentStep={extractionStep} 
+                    totalSteps={extractionSteps.length - 1}
+                    steps={extractionSteps}
+                    isLoading={extractionStep < extractionSteps.length - 1}
+                  />
                 </div>
               )}
               
@@ -194,10 +247,14 @@ const ImportationBulletins: React.FC = () => {
                 description="Glissez-déposez votre fichier Excel/CSV ou cliquez pour parcourir"
               />
               
-              {isParsing && (
-                <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-md flex items-center justify-center space-x-3">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                  <span className="text-sm">Analyse du fichier en cours...</span>
+              {isParsing && extractionStep > 0 && (
+                <div className="mt-4">
+                  <ProgressIndicator 
+                    currentStep={extractionStep} 
+                    totalSteps={extractionSteps.length - 1}
+                    steps={extractionSteps}
+                    isLoading={extractionStep < extractionSteps.length - 1}
+                  />
                 </div>
               )}
               
@@ -217,12 +274,16 @@ const ImportationBulletins: React.FC = () => {
         
         {isProcessing && (
           <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-card shadow-lg rounded-lg p-6 max-w-md text-center">
+            <div className="bg-card shadow-lg rounded-lg p-6 max-w-md">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-              <h3 className="text-lg font-medium mb-2">Traitement en cours...</h3>
-              <p className="text-sm text-muted-foreground">
-                Nous analysons vos données. Veuillez patienter un instant.
-              </p>
+              <h3 className="text-lg font-medium mb-4 text-center">Traitement en cours...</h3>
+              
+              <ProgressIndicator 
+                currentStep={processingStep} 
+                totalSteps={processingSteps.length - 1}
+                steps={processingSteps}
+                isLoading={processingStep < processingSteps.length - 1}
+              />
             </div>
           </div>
         )}

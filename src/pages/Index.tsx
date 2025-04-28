@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
+import ProgressIndicator from '@/components/ProgressIndicator';
 import { ChevronRight, Info, FileSpreadsheet, Upload, Table, Calendar, GraduationCap, BarChart2, Database } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,15 @@ const Index = () => {
   const [previousGradeFiles, setPreviousGradeFiles] = useState<File[]>([]);
   const [savedPreviousFiles, setSavedPreviousFiles] = useState<any[]>([]);
   const [showResults, setShowResults] = useState(false);
-  
+  const [analysisStep, setAnalysisStep] = useState(0);
+  const analysisSteps = [
+    "Chargement des fichiers...",
+    "Extraction des données...",
+    "Analyse des résultats...",
+    "Génération des visualisations...",
+    "Analyse terminée"
+  ];
+
   useEffect(() => {
     const files = getPreviousGradeFiles();
     setSavedPreviousFiles(files || []);
@@ -73,15 +81,31 @@ const Index = () => {
 
     setIsLoading(true);
     setShowResults(false);
+    setAnalysisStep(1); // Démarrer la progression
     console.log("Processing files - Current:", current, "Previous:", previous);
     
     try {
+      // Simuler les différentes étapes du processus
+      const simulateStep = async (step: number, delay: number) => {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setAnalysisStep(step);
+      };
+      
+      await simulateStep(1, 800);  // Chargement des fichiers
+      
       // Set a timeout to prevent UI from appearing stuck
       const timeoutId = setTimeout(() => {
         toast.info("L'analyse des fichiers prend plus de temps que prévu...");
       }, 5000);
       
+      await simulateStep(2, 1500); // Extraction des données
+      
       const data = await processGradeFiles([...current, ...previous]);
+      
+      await simulateStep(3, 1200); // Analyse des résultats
+      await simulateStep(4, 1000); // Génération des visualisations
+      await simulateStep(5, 500);  // Analyse terminée
+      
       clearTimeout(timeoutId);
       
       console.log("Processed data:", data);
@@ -102,6 +126,7 @@ const Index = () => {
         setHasUploaded(false);
       }
       setShowResults(false);
+      setAnalysisStep(0); // Réinitialiser en cas d'erreur
     } finally {
       setIsLoading(false);
     }
@@ -214,6 +239,17 @@ const Index = () => {
               />
             </div>
           </div>
+          
+          {isLoading && analysisStep > 0 && (
+            <div className="mt-4">
+              <ProgressIndicator 
+                currentStep={analysisStep} 
+                totalSteps={analysisSteps.length - 1}
+                steps={analysisSteps}
+                isLoading={analysisStep < analysisSteps.length - 1}
+              />
+            </div>
+          )}
           
           <div className="flex justify-center mt-6">
             <Button 
