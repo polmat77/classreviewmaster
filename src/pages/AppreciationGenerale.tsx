@@ -167,70 +167,66 @@ const AppreciationGenerale = () => {
               maxChars={500}
             />
             
-            <div className="glass-panel p-5 space-y-5">
-              <h2 className="text-lg font-medium">Importation des documents</h2>
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-base font-medium mb-2">Bulletin de classe actuel</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Importez le bulletin de la classe avec les appréciations des enseignants pour la période actuelle.
+                </p>
+                <FileUploader 
+                  onFilesAccepted={handleCurrentReportUpload}
+                  acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
+                  maxFiles={3}
+                  label="Importer le bulletin de classe actuel"
+                  description="Formats acceptés: PDF, CSV, Excel (XLSX, XLS)"
+                />
+              </div>
               
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-base font-medium mb-2">Bulletin de classe actuel</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Importez le bulletin de la classe avec les appréciations des enseignants pour la période actuelle.
-                  </p>
-                  <FileUploader 
-                    onFilesAccepted={handleCurrentReportUpload}
-                    acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
-                    maxFiles={3}
-                    label="Importer le bulletin de classe actuel"
-                    description="Formats acceptés: PDF, CSV, Excel (XLSX, XLS)"
+              {previousFiles && previousFiles.length > 0 && (
+                <div className="bg-secondary/30 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium mb-2">Données historiques disponibles</h4>
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <FileSpreadsheet className="h-4 w-4 mr-2 text-primary" />
+                    <span>
+                      Les données des trimestres précédents seront incluses dans l'analyse
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {isAnalyzing && analysisStep > 0 && (
+                <div className="mt-4">
+                  <ProgressIndicator 
+                    currentStep={analysisStep} 
+                    totalSteps={analysisSteps.length - 1}
+                    steps={analysisSteps}
+                    isLoading={analysisStep < analysisSteps.length - 1}
                   />
                 </div>
-                
-                {previousFiles && previousFiles.length > 0 && (
-                  <div className="bg-secondary/30 p-4 rounded-lg">
-                    <h4 className="text-sm font-medium mb-2">Données historiques disponibles</h4>
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <FileSpreadsheet className="h-4 w-4 mr-2 text-primary" />
-                      <span>
-                        Les données des trimestres précédents seront incluses dans l'analyse
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {isAnalyzing && analysisStep > 0 && (
-                  <div className="mt-4">
-                    <ProgressIndicator 
-                      currentStep={analysisStep} 
-                      totalSteps={analysisSteps.length - 1}
-                      steps={analysisSteps}
-                      isLoading={analysisStep < analysisSteps.length - 1}
-                    />
-                  </div>
-                )}
-                
-                {currentClassReportFiles.length > 0 && (
-                  <button
-                    onClick={() => analyzeFiles()}
-                    disabled={isAnalyzing}
-                    className={cn(
-                      "button-primary w-full flex items-center justify-center space-x-2 py-3",
-                      isAnalyzing && "opacity-70 cursor-not-allowed"
-                    )}
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <span className="animate-spin mr-2">⌛</span>
-                        Analyse en cours...
-                      </>
-                    ) : (
-                      <>
-                        <TrendingUp className="h-4 w-4 mr-2" />
-                        Analyser à nouveau
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
+              )}
+              
+              {currentClassReportFiles.length > 0 && (
+                <button
+                  onClick={() => analyzeFiles()}
+                  disabled={isAnalyzing}
+                  className={cn(
+                    "button-primary w-full flex items-center justify-center space-x-2 py-3",
+                    isAnalyzing && "opacity-70 cursor-not-allowed"
+                  )}
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <span className="animate-spin mr-2">⌛</span>
+                      Analyse en cours...
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Analyser à nouveau
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
           
