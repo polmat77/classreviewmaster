@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AppreciationGenerator from '@/components/AppreciationGenerator';
-import FileUploader from '@/components/FileUploader';
 import ProgressIndicator from '@/components/ProgressIndicator';
 import { KeyRound, Lightbulb, AlertCircle, TrendingUp, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -168,20 +168,6 @@ const AppreciationGenerale = () => {
             />
             
             <div className="space-y-6">
-              <div>
-                <h3 className="text-base font-medium mb-2">Bulletin de classe actuel</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Importez le bulletin de la classe avec les appréciations des enseignants pour la période actuelle.
-                </p>
-                <FileUploader 
-                  onFilesAccepted={handleCurrentReportUpload}
-                  acceptedFileTypes={['.pdf', '.csv', '.xlsx', '.xls']}
-                  maxFiles={3}
-                  label="Importer le bulletin de classe actuel"
-                  description="Formats acceptés: PDF, CSV, Excel (XLSX, XLS)"
-                />
-              </div>
-              
               {previousFiles && previousFiles.length > 0 && (
                 <div className="bg-secondary/30 p-4 rounded-lg">
                   <h4 className="text-sm font-medium mb-2">Données historiques disponibles</h4>
