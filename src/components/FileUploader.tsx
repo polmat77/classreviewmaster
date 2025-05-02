@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { validatePdfFile } from '@/utils/pdf-service';
 import { Progress } from '@/components/ui/progress';
+import { ProgressStatus } from '@/utils/api/types';
 
 interface FileUploaderProps {
   onFilesAccepted: (files: File[]) => void;
@@ -27,6 +28,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [progress, setProgress] = useState<number>(0);
   const [files, setFiles] = useState<File[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationStatus, setValidationStatus] = useState<ProgressStatus>(ProgressStatus.IDLE);
   
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -40,6 +42,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setIsValidating(true);
     setProgress(0);
     setValidationError(null);
+    setValidationStatus(ProgressStatus.PROCESSING);
     
     try {
       // Validate PDF files
@@ -49,31 +52,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         const file = pdfFiles[i];
         console.log(`Validation du fichier ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
         
-        // Tentatives avec délai croissant en cas d'échec
-        let attempt = 1;
-        let validationResult;
-        const maxAttempts = 2;
+        // Update progress
+        setProgress(((i + 0.5) / pdfFiles.length) * 100);
         
-        while (attempt <= maxAttempts) {
-          try {
-            validationResult = await validatePdfFile(file);
-            break; // Si ça réussit, sortir de la boucle
-          } catch (error) {
-            console.warn(`Tentative ${attempt}/${maxAttempts} échouée pour ${file.name}:`, error);
-            
-            if (attempt === maxAttempts) {
-              throw error; // Remonter l'erreur si toutes les tentatives ont échoué
-            }
-            
-            // Attendre avant une nouvelle tentative (délai exponentiel)
-            await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-            attempt++;
-          }
-        }
+        // Validate the file
+        const validationResult = await validatePdfFile(file);
         
         if (!validationResult?.isValid) {
           const errorMsg = `Validation échouée pour ${file.name}: ${validationResult?.reason || "Erreur inconnue"}`;
           setValidationError(errorMsg);
+          setValidationStatus(ProgressStatus.ERROR);
           toast.error(errorMsg);
           setIsValidating(false);
           return;
@@ -85,6 +73,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       
       // Add valid files to state
       setFiles(prev => [...prev, ...acceptedFiles]);
+      setValidationStatus(ProgressStatus.SUCCESS);
       
       // Return files to parent component
       onFilesAccepted(acceptedFiles);
@@ -94,6 +83,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       console.error('Error validating files:', error);
       const errorMsg = `Erreur lors de la validation des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
       setValidationError(errorMsg);
+      setValidationStatus(ProgressStatus.ERROR);
       toast.error(errorMsg);
     } finally {
       setIsValidating(false);
@@ -116,6 +106,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   
   const removeFile = (fileToRemove: File) => {
     setFiles(files.filter(file => file !== fileToRemove));
+  };
+
+  const retryUpload = () => {
+    setValidationError(null);
+    setValidationStatus(ProgressStatus.IDLE);
   };
 
   return (
@@ -150,13 +145,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         </div>
       )}
       
-      {validationError && (
+      {validationError && validationStatus === ProgressStatus.ERROR && (
         <div className="bg-destructive/10 border border-destructive/30 p-3 rounded-md flex items-start gap-2">
           <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-destructive">Erreur de validation</p>
             <p className="text-xs text-destructive/90">{validationError}</p>
-            <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => setValidationError(null)}>
+            <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={retryUpload}>
               Réessayer avec un autre fichier
             </Button>
           </div>
