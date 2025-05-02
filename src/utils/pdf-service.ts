@@ -1,4 +1,3 @@
-
 import * as pdfjs from 'pdfjs-dist';
 
 let isInitialized = false;
@@ -17,34 +16,40 @@ export function initPdfJs(forceReinit = false) {
     }
 
     try {
-      // Utiliser le CDN pour le worker au lieu de créer un worker local
-      const cdnWorkerUrl = 'https://unpkg.com/pdfjs-dist@5.0.375/build/pdf.worker.min.js';
-      pdfjs.GlobalWorkerOptions.workerSrc = cdnWorkerUrl;
+      // Charger le worker directement depuis le package au lieu d'utiliser un CDN
+      const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url);
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc.href;
       
       isInitialized = true;
-      console.log("PDF.js worker initialized from CDN");
+      console.log("PDF.js worker initialized from local package");
     } catch (error) {
       console.error("Erreur lors de l'initialisation du worker PDF.js:", error);
       
-      // Fallback : créer un worker local si le CDN échoue
-      const PDFWorker = `
-        self.onmessage = function(event) {
-          const data = event.data;
-          if (data.type === 'process') {
-            self.postMessage({ type: 'processed', success: true });
-          }
-        };
-      `;
-      
-      // Create a blob URL for the worker
-      const blob = new Blob([PDFWorker], { type: 'application/javascript' });
-      workerUrl = URL.createObjectURL(blob);
-      
-      // Set the worker URL for PDF.js
-      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-      
-      isInitialized = true;
-      console.log("PDF.js worker initialized locally (fallback)");
+      try {
+        // Fallback : créer un worker inline
+        const PDFWorker = `
+          // PDF.js minimal worker
+          self.onmessage = function(e) {
+            const data = e.data;
+            if (data && data.action === 'getDocument') {
+              self.postMessage({ action: 'error', error: 'Worker minimaliste, fonctionnalités limitées' });
+            }
+          };
+        `;
+        
+        // Create a blob URL for the worker
+        const blob = new Blob([PDFWorker], { type: 'application/javascript' });
+        workerUrl = URL.createObjectURL(blob);
+        
+        // Set the worker URL for PDF.js
+        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+        
+        isInitialized = true;
+        console.log("PDF.js worker initialized locally (minimal fallback)");
+      } catch (fallbackError) {
+        console.error("Erreur lors de la création du worker de secours:", fallbackError);
+        throw new Error("Impossible d'initialiser le système de traitement PDF");
+      }
     }
   }
   

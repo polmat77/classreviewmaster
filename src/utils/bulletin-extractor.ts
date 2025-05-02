@@ -1,4 +1,3 @@
-
 import { parseClassBulletins, StudentBulletin, SubjectFeedback } from '@/utils/pdf-processing';
 
 export interface BulletinData {
@@ -29,17 +28,21 @@ export interface BulletinData {
  */
 export async function analyzeBulletins(pdfBuffer: ArrayBuffer): Promise<BulletinData[]> {
   try {
+    console.log("⏱️ Début de l'analyse des bulletins...");
     // Extraire les données structurées avec l'outil existant
     const result = await parseClassBulletins(pdfBuffer);
+    console.log(`✅ Données extraites : ${result.students.length} bulletins d'élèves trouvés`);
     
     // Données par bulletin
     const bulletins: BulletinData[] = [];
     
     // Extraire le nom de l'école à partir d'un bulletin
     const schoolName = extractSchoolName(result.students);
+    console.log(`🏫 École détectée: ${schoolName}`);
     
     // Regrouper par trimestre pour avoir une vue d'ensemble
     const trimesters = detectTrimesters(result.students);
+    console.log(`📅 Trimestres détectés: ${trimesters.join(', ')}`);
     
     for (const trimester of trimesters) {
       const trimNumber = extractTrimesterNumber(trimester);
@@ -48,7 +51,12 @@ export async function analyzeBulletins(pdfBuffer: ArrayBuffer): Promise<Bulletin
       );
       
       // Si pas d'élèves détectés pour ce trimestre, on saute
-      if (studentsInTrimester.length === 0) continue;
+      if (studentsInTrimester.length === 0) {
+        console.log(`⚠️ Aucun élève détecté pour ${trimester}, passage au suivant`);
+        continue;
+      }
+      
+      console.log(`📊 Traitement du ${trimester}: ${studentsInTrimester.length} élèves`);
       
       // Collecter toutes les matières de ce trimestre
       const allSubjects = new Set<string>();
@@ -134,9 +142,10 @@ export async function analyzeBulletins(pdfBuffer: ArrayBuffer): Promise<Bulletin
       });
     }
     
+    console.log(`✅ Analyse terminée : ${bulletins.length} bulletins générés`);
     return bulletins;
   } catch (error) {
-    console.error("Erreur lors de l'analyse des bulletins:", error);
+    console.error("❌ Erreur lors de l'analyse des bulletins:", error);
     throw new Error(`Impossible d'analyser les bulletins: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
   }
 }

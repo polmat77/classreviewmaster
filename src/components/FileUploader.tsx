@@ -1,11 +1,10 @@
-
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, File, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, File, X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { validatePdfFile } from '@/utils/pdf-service';
+import { validatePdfFile, initPdfJs } from '@/utils/pdf-service';
 import { Progress } from '@/components/ui/progress';
 import { ProgressStatus } from '@/utils/api/types';
 
@@ -30,6 +29,18 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationStatus, setValidationStatus] = useState<ProgressStatus>(ProgressStatus.IDLE);
   const [processingMessage, setProcessingMessage] = useState<string>('');
+  const [initError, setInitError] = useState<string | null>(null);
+  
+  // Initialiser PDF.js au chargement du composant
+  useEffect(() => {
+    try {
+      initPdfJs();
+      setInitError(null);
+    } catch (error) {
+      console.error("Erreur d'initialisation PDF.js:", error);
+      setInitError("Le système de traitement PDF n'a pas pu s'initialiser correctement.");
+    }
+  }, []);
   
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -66,6 +77,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       
       // On continue avec les fichiers PDF
       if (pdfFiles.length === 0) return;
+      
+      // Réinitialiser PDF.js si nécessaire
+      try {
+        initPdfJs(true);
+      } catch (error) {
+        console.warn("Erreur lors de la réinitialisation de PDF.js, continuation avec l'état actuel");
+      }
       
       // Validate PDF files with progressive updates
       let validPdfCount = 0;
@@ -172,10 +190,35 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const retryUpload = () => {
     setValidationError(null);
     setValidationStatus(ProgressStatus.IDLE);
+    setInitError(null);
+    // Tenter de réinitialiser PDF.js
+    try {
+      initPdfJs(true);
+    } catch (error) {
+      console.error("Erreur lors de la réinitialisation:", error);
+    }
   };
 
   return (
     <div className="space-y-4">
+      {initError && (
+        <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800">Problème d'initialisation</p>
+            <p className="text-xs text-amber-700">{initError}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 text-xs h-8 border-amber-300 text-amber-700"
+              onClick={retryUpload}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" /> Réessayer
+            </Button>
+          </div>
+        </div>
+      )}
+    
       <div
         {...getRootProps()}
         className={cn(
@@ -220,6 +263,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             <p className="text-sm font-medium text-amber-800">Attention</p>
             <p className="text-xs text-amber-700">{validationError}</p>
             <p className="text-xs text-amber-700">Les fichiers ont été acceptés malgré l'erreur.</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 text-xs h-8 border-amber-300 text-amber-700"
+              onClick={retryUpload}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" /> Réessayer l'initialisation
+            </Button>
           </div>
         </div>
       )}
