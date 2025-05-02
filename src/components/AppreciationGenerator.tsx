@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OpenAIService } from '@/utils/openai-service';
 import { toast } from 'sonner';
@@ -10,6 +10,8 @@ import FileUploader from './FileUploader';
 import ToneSelector from './appreciation/ToneSelector';
 import LengthSelector from './appreciation/LengthSelector';
 import AppreciationResult from './appreciation/AppreciationResult';
+import { extractTextFromPDF } from '@/utils/pdf-service';
+import { parseClassBulletins } from '@/utils/pdf-processing';
 
 interface AppreciationGeneratorProps {
   type: 'class' | 'individual';
@@ -43,6 +45,10 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   const [appreciation, setAppreciation] = useState('');
   const [copied, setCopied] = useState(false);
   const [classReportFiles, setClassReportFiles] = useState<File[]>([]);
+  const [extractedText, setExtractedText] = useState('');
+  const [extractionProgress, setExtractionProgress] = useState(0);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
   
   useEffect(() => {
     // Générer l'appréciation si on a des données d'analyse
@@ -51,16 +57,108 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
     }
   }, [analysisData]);
   
-  // Ne pas générer automatiquement lors du téléchargement de fichiers
-  // pour éviter les erreurs de timeout
-  const handleFileUpload = (files: File[]) => {
+  const handleFileUpload = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    
     setClassReportFiles(files);
-    toast.success(`${files.length} fichier(s) ajouté(s). Cliquez sur "Générer l'appréciation" pour continuer.`);
+    setIsExtracting(true);
+    setExtractionProgress(0);
+    setExtractionError(null);
+    
+    try {
+      // Pour chaque fichier PDF, on extrait le texte et on analyse les bulletins
+      for (const file of files) {
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          // Optimisation: créer un ArrayBuffer une seule fois pour tous les usages
+          const arrayBuffer = await file.arrayBuffer();
+          
+          // 1. Extraction du texte brut pour avoir une version textuelle
+          setExtractionProgress(10);
+          toast.info(`Extraction du texte de ${file.name} en cours...`);
+          
+          try {
+            // Premier essai: extraction des bulletins structurés
+            const bulletinResult = await parseClassBulletins(
+              arrayBuffer,
+              (progress) => {
+                setExtractionProgress(Math.min(progress, 90));
+              }
+            );
+            
+            // Afficher un message si des bulletins ont été trouvés
+            if (bulletinResult.students.length > 0) {
+              toast.success(`${bulletinResult.students.length} bulletins d'élèves extraits avec succès`);
+              
+              // Stocker les données extraites dans le format attendu par le générateur
+              const processedData = {
+                className: bulletinResult.students[0]?.class || "Classe inconnue",
+                term: "Trimestre",  // À détecter dans le fichier
+                students: bulletinResult.students.map(student => ({
+                  name: student.name,
+                  subjects: student.subjects.map(subj => ({
+                    name: subj.subject,
+                    grade: subj.average || 0,
+                    comment: subj.remark,
+                    teacher: subj.teacher || ""
+                  })),
+                  average: student.subjects.reduce(
+                    (sum, subj) => sum + (subj.average || 0), 0
+                  ) / student.subjects.filter(s => s.average !== null).length
+                })),
+                classSummary: bulletinResult.classSummary
+              };
+              
+              // Utiliser ces données pour l'analyse
+              setAppreciation(''); // Réinitialiser pour forcer une nouvelle génération
+              generateAppreciation(processedData);
+            } else {
+              // Si pas de bulletins trouvés, extraction en texte brut
+              toast.warning(`Structure de bulletin non reconnue dans ${file.name}, utilisation du texte brut à la place`);
+              const pdfText = await extractTextFromPDF(file, progress => {
+                setExtractionProgress(progress);
+              });
+              setExtractedText(pdfText);
+            }
+          } catch (err) {
+            console.error("Erreur lors de l'analyse des bulletins:", err);
+            toast.error(`Erreur lors de l'analyse structurée. Tentative d'extraction en texte brut.`);
+            
+            // Fallback: extraction simple en texte
+            try {
+              const pdfText = await extractTextFromPDF(file, progress => {
+                setExtractionProgress(progress);
+              });
+              setExtractedText(pdfText);
+              
+              // Auto-détection de certains éléments basée sur le texte extrait
+              const classMatch = pdfText.match(/Classe\s*:?\s*(\d+)/i);
+              const trimestreMatch = pdfText.match(/Trimestre\s*(\d)/i);
+              
+              toast.info(`Texte extrait avec succès (${pdfText.length} caractères)`);
+              toast.info(`Cliquez sur "Générer l'appréciation" pour continuer.`);
+            } catch (textError) {
+              console.error("Erreur également avec l'extraction de texte:", textError);
+              toast.error(`Impossible d'extraire le contenu du fichier ${file.name}`);
+              setExtractionError(`Échec de l'extraction pour ${file.name}`);
+            }
+          }
+        } else {
+          toast.info(`Le fichier ${file.name} n'est pas un PDF. Essayez un autre format.`);
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors du traitement des fichiers:', error);
+      setExtractionError(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      toast.error(`Une erreur s'est produite lors de l'extraction du texte`);
+    } finally {
+      setIsExtracting(false);
+      setExtractionProgress(100);
+    }
   };
   
-  const generateAppreciation = async () => {
+  const generateAppreciation = async (customData?: any) => {
     // Si on n'a pas de données d'analyse mais des fichiers, on utilise les fichiers directement
-    if (!analysisData && classReportFiles.length === 0) {
+    if (!analysisData && !customData && classReportFiles.length === 0 && !extractedText) {
       toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer des fichiers.");
       return;
     }
@@ -70,10 +168,11 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
     try {
       let result = '';
       
-      // Utiliser les données d'analyse si disponibles, sinon utiliser les fichiers directement
-      const dataToUse = type === 'individual' && student 
-        ? { student, classData: analysisData }
-        : analysisData || { files: classReportFiles.map(f => f.name) };
+      // Utiliser les données personnalisées ou d'analyse si disponibles, sinon utiliser le texte extrait
+      const dataToUse = customData || 
+        (type === 'individual' && student 
+          ? { student, classData: analysisData }
+          : analysisData || { extractedText });
       
       if (type === 'individual' && student) {
         result = await OpenAIService.generateStudentAppreciation(
@@ -83,12 +182,21 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
           length[0]
         );
       } else {
-        // Générer une appréciation même avec des données minimales
-        result = await OpenAIService.generateClassAppreciation(
-          dataToUse,
-          tone,
-          length[0]
-        );
+        // Si on a du texte extrait, l'inclure dans la demande
+        if (extractedText && !customData) {
+          result = await OpenAIService.generateClassAppreciation(
+            { extractedText, files: classReportFiles.map(f => f.name) },
+            tone,
+            length[0]
+          );
+        } else {
+          // Utiliser les données d'analyse ou personnalisées
+          result = await OpenAIService.generateClassAppreciation(
+            dataToUse,
+            tone,
+            length[0]
+          );
+        }
       }
       
       setAppreciation(result);
@@ -138,6 +246,51 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
                 label="Importer les bulletins de classe"
                 description="Formats acceptés: PDF, CSV, Excel (XLSX, XLS)"
               />
+              
+              {isExtracting && (
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Extraction en cours...</span>
+                    <span className="text-sm font-medium">{extractionProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+                      style={{ width: `${extractionProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Patientez pendant l'analyse des bulletins...</p>
+                </div>
+              )}
+              
+              {extractionError && (
+                <div className="mt-4 p-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 flex items-start">
+                  <AlertTriangle className="h-5 w-5 mr-2 shrink-0 text-amber-500" />
+                  <div>
+                    <p className="font-medium">Problème lors de l'extraction</p>
+                    <p className="text-sm">{extractionError}</p>
+                    <p className="text-sm mt-1">
+                      Essayez un PDF différent ou utilisez un format Excel/CSV à la place.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {extractedText && (
+                <div className="mt-4">
+                  <details className="border rounded-md p-3">
+                    <summary className="font-medium cursor-pointer">
+                      Texte extrait ({Math.min(extractedText.length, 1000)} caractères)
+                    </summary>
+                    <div className="mt-2 p-3 bg-gray-50 rounded-md max-h-[200px] overflow-y-auto">
+                      <pre className="text-xs whitespace-pre-wrap">
+                        {extractedText.substring(0, 1000)}
+                        {extractedText.length > 1000 && '...'}
+                      </pre>
+                    </div>
+                  </details>
+                </div>
+              )}
             </div>
           )}
 
@@ -145,9 +298,9 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
           <LengthSelector length={length} maxChars={maxChars} onLengthChange={setLength} />
 
           <Button 
-            onClick={generateAppreciation}
+            onClick={() => generateAppreciation()}
             className="w-full h-14 text-lg"
-            disabled={isGenerating || (type === 'class' && classReportFiles.length === 0 && !analysisData) || (type === 'individual' && !student)}
+            disabled={isGenerating || (type === 'class' && classReportFiles.length === 0 && !analysisData && !extractedText) || (type === 'individual' && !student)}
           >
             {isGenerating ? (
               <>
@@ -162,7 +315,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
           {appreciation && (
             <AppreciationResult 
               appreciation={appreciation}
-              onRegenerate={generateAppreciation}
+              onRegenerate={() => generateAppreciation()}
               onCopy={copyToClipboard}
             />
           )}

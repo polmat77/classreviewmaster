@@ -29,6 +29,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [files, setFiles] = useState<File[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationStatus, setValidationStatus] = useState<ProgressStatus>(ProgressStatus.IDLE);
+  const [processingMessage, setProcessingMessage] = useState<string>('');
   
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -66,49 +67,57 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       // On continue avec les fichiers PDF
       if (pdfFiles.length === 0) return;
       
-      // Validate PDF files with a shorter timeout
+      // Validate PDF files with progressive updates
       let validPdfCount = 0;
+      const validatedFiles: File[] = [];
       
-      const validationPromises = pdfFiles.map(async (file, index) => {
+      for (let i = 0; i < pdfFiles.length; i++) {
+        const file = pdfFiles[i];
+        setProcessingMessage(`Validation du fichier ${i + 1}/${pdfFiles.length}: ${file.name}`);
+        
         try {
-          // Update progress
-          setProgress(((index + 0.5) / pdfFiles.length) * 100);
+          // Montrer la progression
+          setProgress(((i) / pdfFiles.length) * 50);
           
-          // Validate the file with a shorter timeout using Promise.race
+          // Valider le fichier avec un système de timeout amélioré
           const validationPromise = validatePdfFile(file);
           const timeoutPromise = new Promise<{isValid: boolean, reason: string}>((resolve) => {
             setTimeout(() => resolve({
               isValid: true,  // On accepte le fichier même en cas de timeout
               reason: "Timeout dépassé mais fichier accepté quand même"
-            }), 10000);
+            }), 20000); // Augmenté à 20s
           });
           
           const validationResult = await Promise.race([validationPromise, timeoutPromise]);
           
           if (validationResult.isValid) {
             validPdfCount++;
-            return file;
+            validatedFiles.push(file);
+            
+            // Avertir si le fichier a été accepté malgré des problèmes
+            if (validationResult.reason) {
+              toast.warning(`${file.name}: ${validationResult.reason}`);
+            }
           } else {
             console.warn(`Validation échouée pour ${file.name}: ${validationResult.reason}`);
             // On accepte quand même le fichier avec un avertissement
             toast.warning(`Le fichier ${file.name} pourrait poser des problèmes (${validationResult.reason})`);
+            validatedFiles.push(file); // On l'ajoute quand même
             validPdfCount++;
-            return file;
           }
         } catch (error) {
           console.error(`Error validating ${file.name}:`, error);
           // On accepte quand même le fichier avec un avertissement
           toast.warning(`Le fichier ${file.name} n'a pas pu être validé mais sera utilisé quand même`);
+          validatedFiles.push(file); // On l'ajoute quand même
           validPdfCount++;
-          return file;
-        } finally {
-          // Update progress
-          setProgress(((index + 1) / pdfFiles.length) * 100);
         }
-      });
+        
+        // Update progress
+        setProgress(50 + ((i + 1) / pdfFiles.length) * 50);
+      }
       
-      const validatedFiles = await Promise.all(validationPromises);
-      const allValidatedFiles = [...nonPdfFiles, ...validatedFiles.filter(Boolean)];
+      const allValidatedFiles = [...nonPdfFiles, ...validatedFiles];
       
       // Add valid files to state
       setFiles(prev => [...prev, ...allValidatedFiles]);
@@ -118,6 +127,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       onFilesAccepted(allValidatedFiles);
       
       toast.success(`${allValidatedFiles.length} fichier(s) ajouté(s) avec succès`);
+      
+      // Instructions spéciales pour les bulletins
+      if (validatedFiles.some(f => f.name.toLowerCase().includes("bulletin") || 
+                                  f.name.toLowerCase().includes("trimestre"))) {
+        toast.info("Ces fichiers semblent être des bulletins scolaires. Le traitement peut prendre quelques instants.", {
+          duration: 6000
+        });
+      }
     } catch (error) {
       console.error('Error handling files:', error);
       setValidationError(`Erreur lors du traitement des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
@@ -130,6 +147,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       toast.info("Les fichiers ont été acceptés malgré l'erreur");
     } finally {
       setIsValidating(false);
+      setProcessingMessage('');
     }
   }, [files, maxFiles, onFilesAccepted]);
 
@@ -174,17 +192,24 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           {description && (
             <p className="text-sm text-muted-foreground">{description}</p>
           )}
+          <div className="text-xs text-muted-foreground mt-2">
+            Conseil: pour les bulletins scolaires PDF, assurez-vous qu'ils ne sont pas verrouillés ou protégés
+          </div>
         </div>
       </div>
       
       {isValidating && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">Traitement des fichiers...</div>
+            <div className="text-sm text-muted-foreground">
+              {processingMessage || "Traitement des fichiers..."}
+            </div>
             <div className="text-sm font-medium">{Math.round(progress)}%</div>
           </div>
           <Progress value={progress} className="h-2" />
-          <p className="text-xs text-muted-foreground">Les fichiers volumineux peuvent prendre du temps à traiter</p>
+          <p className="text-xs text-muted-foreground">
+            Les fichiers volumineux peuvent prendre du temps à traiter. Merci de patienter.
+          </p>
         </div>
       )}
       
@@ -226,6 +251,20 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               </div>
             ))}
           </div>
+        </div>
+      )}
+      
+      {acceptedFileTypes.includes('.pdf') && (
+        <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+          <p>
+            <strong>Conseils pour les bulletins PDF:</strong>
+          </p>
+          <ul className="list-disc pl-4 mt-1 space-y-0.5">
+            <li>Les bulletins issus de logiciels scolaires comme Pronote fonctionnent généralement bien</li>
+            <li>Évitez les PDF scannés ou avec des images, privilégiez le format texte</li>
+            <li>Des tableaux complexes peuvent être difficiles à extraire correctement</li>
+            <li>Alternative: utilisez des formats Excel/CSV si disponibles</li>
+          </ul>
         </div>
       )}
     </div>
