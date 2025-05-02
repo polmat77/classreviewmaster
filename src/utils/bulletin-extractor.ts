@@ -1,3 +1,4 @@
+
 import { parseClassBulletins, StudentBulletin, SubjectFeedback } from '@/utils/pdf-processing';
 
 export interface BulletinData {
@@ -29,6 +30,10 @@ export interface BulletinData {
 export async function analyzeBulletins(pdfBuffer: ArrayBuffer): Promise<BulletinData[]> {
   try {
     console.log("⏱️ Début de l'analyse des bulletins...");
+    
+    // Ajouter des logs détaillés pour le debugging
+    console.log(`📊 Taille du buffer PDF: ${(pdfBuffer.byteLength / (1024 * 1024)).toFixed(2)} Mo`);
+    
     // Extraire les données structurées avec l'outil existant
     const result = await parseClassBulletins(pdfBuffer);
     console.log(`✅ Données extraites : ${result.students.length} bulletins d'élèves trouvés`);
@@ -158,9 +163,20 @@ function extractSchoolName(students: StudentBulletin[]): string {
     const subjects = student.subjects || [];
     for (const subject of subjects) {
       const text = subject.remark || "";
-      const collegeMatch = text.match(/COLLEGE\s([A-Z\s]+)/i);
-      if (collegeMatch) {
-        return collegeMatch[0].trim();
+      
+      // Version plus robuste qui cherche plusieurs patterns
+      const collegePatterns = [
+        /COLLEGE\s([A-Z\s]+)/i,
+        /LYCEE\s([A-Z\s]+)/i,
+        /ÉCOLE\s([A-Z\s]+)/i,
+        /INSTITUTION\s([A-Z\s]+)/i
+      ];
+      
+      for (const pattern of collegePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          return match[0].trim();
+        }
       }
     }
   }
@@ -170,18 +186,54 @@ function extractSchoolName(students: StudentBulletin[]): string {
 function extractClassName(students: StudentBulletin[]): string {
   // Utiliser la propriété class des bulletins des élèves
   const classes = students.map(s => s.class).filter(Boolean);
+  
+  // Si pas de classe définie, chercher dans le texte des remarques
+  if (classes.length === 0) {
+    const classPatterns = [
+      /classe:?\s*([0-9][A-Za-z][0-9]?)/i,
+      /([0-9]e[0-9]?)/i,
+      /classe:?\s*([A-Za-z0-9]+)/i
+    ];
+    
+    for (const student of students) {
+      for (const subject of student.subjects) {
+        const text = subject.remark || "";
+        
+        for (const pattern of classPatterns) {
+          const match = text.match(pattern);
+          if (match && match[1]) {
+            return match[1].trim();
+          }
+        }
+      }
+    }
+    
+    return "Classe inconnue";
+  }
+  
   return classes.length > 0 ? mostFrequent(classes) : "Classe inconnue";
 }
 
 function extractMainTeacher(students: StudentBulletin[]): string | undefined {
-  // Chercher des motifs comme "Professeur principal : M. ZENATI"
+  // Patterns pour trouver le professeur principal
+  const patterns = [
+    /Professeur\s+principal\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s.]+)/i,
+    /PP\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s.]+)/i,
+    /Professeur\s+référent\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s.]+)/i
+  ];
+  
   for (const student of students) {
     const text = student.subjects.map(s => s.remark).join(" ");
-    const match = text.match(/Professeur\s+principal\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s.]+)/i);
-    if (match) {
-      return match[1].trim();
+    
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        // Nettoyer le résultat (enlever caractères spéciaux en fin)
+        return match[1].trim().replace(/[.,;:]$/, "");
+      }
     }
   }
+  
   return undefined;
 }
 
@@ -189,20 +241,31 @@ function detectTrimesters(students: StudentBulletin[]): string[] {
   // Détecter les mentions de trimestres dans le texte
   const trimesters = new Set<string>();
   
+  // Patterns pour détecter les trimestres
+  const trimesterPatterns = [
+    /Bulletin du (\d+)(?:er|ème|e)?[\s]*Trimestre/gi,
+    /Trimestre\s+(\d+)/gi, 
+    /(\d+)(?:er|ème|e)?[\s]*Trimestre/gi,
+    /Trimestre[\s:]*(\d+)/gi
+  ];
+  
   for (const student of students) {
     const allText = student.subjects.map(s => s.remark).join(" ");
     
-    // Chercher des motifs comme "Bulletin du 1er Trimestre"
-    const matches = allText.match(/Bulletin du (\d+)(?:er|ème|e)?[\s]*Trimestre/gi);
-    if (matches) {
-      matches.forEach(m => trimesters.add(m));
+    for (const pattern of trimesterPatterns) {
+      const matches = allText.matchAll(pattern);
+      for (const match of matches) {
+        if (match[0]) {
+          trimesters.add(match[0]);
+        }
+      }
     }
-    
-    // Alternative: chercher juste "Trimestre 1", etc.
-    const simpleMatches = allText.match(/Trimestre\s+\d+/gi);
-    if (simpleMatches) {
-      simpleMatches.forEach(m => trimesters.add(m));
-    }
+  }
+  
+  // Si aucun trimestre détecté, on force le trimestre 1
+  if (trimesters.size === 0) {
+    console.log("⚠️ Aucun trimestre détecté, utilisation du trimestre 1 par défaut");
+    trimesters.add("Trimestre 1");
   }
   
   return Array.from(trimesters);
@@ -216,11 +279,16 @@ function extractTrimesterNumber(trimesterText: string): number {
 
 function mostFrequent<T>(arr: T[]): T {
   // Trouver l'élément le plus fréquent dans un tableau
-  const counts = new Map<T, number>();
-  arr.forEach(val => counts.set(val, (counts.get(val) || 0) + 1));
+  const counts = new Map<string, number>();
+  
+  // Convertir tous les éléments en string pour le comptage
+  arr.forEach(val => {
+    const strVal = String(val).trim();
+    counts.set(strVal, (counts.get(strVal) || 0) + 1);
+  });
   
   let maxCount = 0;
-  let maxVal: T = arr[0];
+  let maxVal: string = String(arr[0]);
   
   for (const [val, count] of counts.entries()) {
     if (count > maxCount) {
@@ -229,7 +297,9 @@ function mostFrequent<T>(arr: T[]): T {
     }
   }
   
-  return maxVal;
+  // Reconvertir au type original en trouvant l'élément original
+  const originalVal = arr.find(v => String(v).trim() === maxVal) || arr[0];
+  return originalVal;
 }
 
 /**
@@ -238,11 +308,19 @@ function mostFrequent<T>(arr: T[]): T {
  */
 export function detectBulletinFormat(text: string): string {
   if (text.includes("COLLEGE ROMAN ROLLAND") || 
+      text.includes("COLLEGE ROMAIN ROLLAND") || 
       text.includes("Appréciations générales de la classe")) {
     return "roman-rolland";
   }
   
-  // Détecter d'autres formats ici
+  // Détecter d'autres formats
+  if (text.includes("Bulletin scolaire") || text.includes("Bulletin de notes")) {
+    return "standard-bulletin";
+  }
+  
+  if (text.includes("Tableau des moyennes")) {
+    return "moyennes-tableau";
+  }
   
   return "standard"; // format par défaut
 }
@@ -266,8 +344,33 @@ export function createBulletinTemplate(format: string) {
           subject: '-{5,}'
         }
       };
+    case "standard-bulletin":
+      return {
+        studentNamePattern: '(?:Élève|Nom):\\s*([A-Za-z\\s\\-]+)',
+        subjectPattern: '([A-Z][A-Za-z\\s]+)\\s*:\\s*\\d',
+        gradePattern: '(\\d+[,.]\\d+)(?:\\s*/\\s*\\d+)?',
+        classAveragePattern: '(?:Moyenne|générale)\\s*:?\\s*(\\d+[,.]\\d+)',
+        teacherCommentPattern: '(?:Appréciation|Commentaire)\\s*:?\\s*([^\\n]+)',
+        termPattern: '(?:Trimestre|Période)\\s*(\\d+)',
+        delimiters: {
+          student: '(?:-{10,}|={10,}|\\*{10,})',
+          subject: '(?:-{5,}|={5,})'
+        }
+      };
+    case "moyennes-tableau":
+      return {
+        studentNamePattern: '([A-Z][A-Za-z\\-\\s]+)',
+        subjectPattern: '([A-Z][A-Za-z\\s]+)',
+        gradePattern: '(\\d+[,.]\\d+)',
+        tableRowPattern: '^([^|]+)\\|([^|]+)\\|([^|]+)',
+        columnDelimiter: '\\|'
+      };
     // Ajouter d'autres formats ici
     default:
-      return {}; // Template vide, détection automatique
+      return {
+        studentNamePattern: '([A-Z][A-Za-z\\-\\s]+)',
+        subjectPattern: '([A-Z][A-Za-z\\s]+)',
+        gradePattern: '(\\d+[,.]\\d+)',
+      }; // Template de détection générique
   }
 }

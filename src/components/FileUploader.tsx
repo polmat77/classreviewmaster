@@ -30,17 +30,19 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [validationStatus, setValidationStatus] = useState<ProgressStatus>(ProgressStatus.IDLE);
   const [processingMessage, setProcessingMessage] = useState<string>('');
   const [initError, setInitError] = useState<string | null>(null);
+  const [initAttempt, setInitAttempt] = useState<number>(0);
   
-  // Initialiser PDF.js au chargement du composant
+  // Initialiser PDF.js au chargement du composant et à chaque changement d'initAttempt
   useEffect(() => {
     try {
-      initPdfJs();
+      initPdfJs(initAttempt > 0); // Force réinitialisation si ce n'est pas le premier chargement
       setInitError(null);
+      console.log(`PDF.js initialisé (tentative #${initAttempt + 1})`);
     } catch (error) {
       console.error("Erreur d'initialisation PDF.js:", error);
       setInitError("Le système de traitement PDF n'a pas pu s'initialiser correctement.");
     }
-  }, []);
+  }, [initAttempt]);
   
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -78,11 +80,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       // On continue avec les fichiers PDF
       if (pdfFiles.length === 0) return;
       
-      // Réinitialiser PDF.js si nécessaire
+      // Force PDF.js reinitialization
       try {
         initPdfJs(true);
       } catch (error) {
         console.warn("Erreur lors de la réinitialisation de PDF.js, continuation avec l'état actuel");
+        // On augmente quand même le nombre de tentatives pour l'effet useEffect
+        setInitAttempt(prev => prev + 1);
       }
       
       // Validate PDF files with progressive updates
@@ -103,7 +107,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             setTimeout(() => resolve({
               isValid: true,  // On accepte le fichier même en cas de timeout
               reason: "Timeout dépassé mais fichier accepté quand même"
-            }), 20000); // Augmenté à 20s
+            }), 20000); // 20 secondes
           });
           
           const validationResult = await Promise.race([validationPromise, timeoutPromise]);
@@ -157,12 +161,23 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       console.error('Error handling files:', error);
       setValidationError(`Erreur lors du traitement des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
       setValidationStatus(ProgressStatus.ERROR);
-      toast.error("Une erreur s'est produite lors du traitement des fichiers");
       
-      // Accepter quand même les fichiers en cas d'erreur
+      // Message plus clair sur les causes possibles
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      if (errorMessage.includes("worker") || errorMessage.includes("PDF.js")) {
+        toast.error("Problème avec le moteur de traitement PDF. Essayez de recharger la page.", {
+          duration: 8000
+        });
+      } else {
+        toast.error("Une erreur s'est produite lors du traitement des fichiers");
+      }
+      
+      // Accepter quand même les fichiers en cas d'erreur pour permettre quand même l'utilisation
       setFiles(prev => [...prev, ...acceptedFiles]);
       onFilesAccepted(acceptedFiles);
-      toast.info("Les fichiers ont été acceptés malgré l'erreur");
+      toast.info("Les fichiers ont été acceptés malgré l'erreur", {
+        duration: 5000
+      });
     } finally {
       setIsValidating(false);
       setProcessingMessage('');
@@ -191,12 +206,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setValidationError(null);
     setValidationStatus(ProgressStatus.IDLE);
     setInitError(null);
-    // Tenter de réinitialiser PDF.js
-    try {
-      initPdfJs(true);
-    } catch (error) {
-      console.error("Erreur lors de la réinitialisation:", error);
-    }
+    // Forcer une réinitialisation complète de PDF.js
+    setInitAttempt(prev => prev + 1);
   };
 
   return (

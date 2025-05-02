@@ -1,3 +1,4 @@
+
 import * as pdfjs from 'pdfjs-dist';
 
 let isInitialized = false;
@@ -16,17 +17,16 @@ export function initPdfJs(forceReinit = false) {
     }
 
     try {
-      // Charger le worker directement depuis le package au lieu d'utiliser un CDN
-      const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url);
-      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc.href;
+      // Méthode 1: Utiliser le CDN pour le worker (solution plus fiable)
+      pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.0.375/build/pdf.worker.min.js';
       
+      console.log("PDF.js worker initialized from CDN");
       isInitialized = true;
-      console.log("PDF.js worker initialized from local package");
     } catch (error) {
-      console.error("Erreur lors de l'initialisation du worker PDF.js:", error);
+      console.error("Erreur lors de l'initialisation du worker PDF.js depuis CDN:", error);
       
       try {
-        // Fallback : créer un worker inline
+        // Méthode 2: Créer un worker inline (fallback)
         const PDFWorker = `
           // PDF.js minimal worker
           self.onmessage = function(e) {
@@ -45,7 +45,7 @@ export function initPdfJs(forceReinit = false) {
         pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
         
         isInitialized = true;
-        console.log("PDF.js worker initialized locally (minimal fallback)");
+        console.log("PDF.js worker initialized with inline worker (minimal fallback)");
       } catch (fallbackError) {
         console.error("Erreur lors de la création du worker de secours:", fallbackError);
         throw new Error("Impossible d'initialiser le système de traitement PDF");
@@ -95,7 +95,7 @@ export async function extractTextFromPDF(
       const timeoutId = setTimeout(() => {
         reject(new Error("Le traitement du PDF prend trop de temps. Le fichier est peut-être trop volumineux ou complexe."));
         console.warn("PDF processing timeout triggered");
-      }, 180000); // 180 seconds timeout (augmenté de 120 à 180)
+      }, 180000); // 180 seconds timeout
       
       // Clear the timeout if processing completes
       setTimeout(() => clearTimeout(timeoutId), 181000);
@@ -103,15 +103,19 @@ export async function extractTextFromPDF(
     
     // Create the PDF processing promise with incremental progress
     const processingPromise = async () => {
-      const pdf = await pdfjs.getDocument({ 
+      // Options supplémentaires pour gérer les PDFs protégés
+      const loadingOptions = { 
         data: arrayBuffer,
-        cMapUrl: 'https://unpkg.com/pdfjs-dist@5.0.375/cmaps/',
+        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.0.375/cmaps/',
         cMapPacked: true,
-        // Optimisations supplémentaires pour les bulletins scolaires
-        disableFontFace: true, // Désactiver le chargement des fontes pour accélérer
-        useSystemFonts: false, // Ne pas utiliser les polices système
-        useWorkerFetch: true, // Utiliser des workers pour le téléchargement
-      }).promise;
+        // Optimisations
+        disableFontFace: true,      // Désactiver le chargement des fontes pour accélérer
+        useSystemFonts: false,      // Ne pas utiliser les polices système
+        useWorkerFetch: true,       // Utiliser des workers pour le téléchargement
+        standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.0.375/standard_fonts/',
+      };
+      
+      const pdf = await pdfjs.getDocument(loadingOptions).promise;
       
       console.log(`PDF loaded with ${pdf.numPages} pages`);
       
@@ -127,7 +131,7 @@ export async function extractTextFromPDF(
       }
       
       // Process in smaller chunks for larger documents
-      const chunkSize = 2; // Process 2 pages at a time (was 1)
+      const chunkSize = 2; // Process 2 pages at a time
       let fullText = '';
       
       for (let chunkStart = 1; chunkStart <= pagesToProcess; chunkStart += chunkSize) {
@@ -135,7 +139,7 @@ export async function extractTextFromPDF(
         console.log(`Processing pages ${chunkStart} to ${chunkEnd}`);
         
         // Process pages in the current chunk with timeout for each chunk
-        const chunkTimeout = 30000; // 30 seconds per chunk (augmenté de 20 à 30)
+        const chunkTimeout = 30000; // 30 seconds per chunk
         const chunkPromises = [];
         
         for (let i = chunkStart; i <= chunkEnd; i++) {
@@ -170,54 +174,59 @@ export async function extractTextFromPDF(
     
     // Process the page and extract text
     async function processPage(pdf: any, pageNum: number) {
-      const page = await pdf.getPage(pageNum);
-      
-      // Optimisations pour les bulletins scolaires
-      // Essayer d'obtenir le texte structuré avec une meilleure précision de positionnement
-      const content = await page.getTextContent({
-        normalizeWhitespace: true,
-        disableCombineTextItems: false,
-        includeMarkedContent: true
-      });
-      
-      // Pour les bulletins, essayer de reconstruire la structure en fonction des positions
-      let pageText = '';
-      let lastY = -1;
-      let currentLine = '';
-      
-      // Trier les éléments par position Y (de haut en bas)
-      const sortedItems = [...content.items];
-      sortedItems.sort((a: any, b: any) => {
-        const aY = a.transform ? a.transform[5] : 0;
-        const bY = b.transform ? b.transform[5] : 0;
-        return bY - aY; // Y décroissant (haut de page vers bas)
-      });
-      
-      // Tolérance de position Y pour considérer que des éléments sont sur la même ligne
-      const yTolerance = 3;
-      
-      for (const item of sortedItems) {
-        if (!item.str) continue;
+      try {
+        const page = await pdf.getPage(pageNum);
         
-        const y = item.transform ? item.transform[5] : 0;
+        // Optimisations pour les bulletins scolaires
+        // Essayer d'obtenir le texte structuré avec une meilleure précision de positionnement
+        const content = await page.getTextContent({
+          normalizeWhitespace: true,
+          disableCombineTextItems: false,
+          includeMarkedContent: true
+        });
         
-        // Si on change de ligne (basé sur position Y)
-        if (lastY !== -1 && Math.abs(y - lastY) > yTolerance) {
-          pageText += currentLine.trim() + '\n';
-          currentLine = '';
+        // Pour les bulletins, essayer de reconstruire la structure en fonction des positions
+        let pageText = '';
+        let lastY = -1;
+        let currentLine = '';
+        
+        // Trier les éléments par position Y (de haut en bas)
+        const sortedItems = [...content.items];
+        sortedItems.sort((a: any, b: any) => {
+          const aY = a.transform ? a.transform[5] : 0;
+          const bY = b.transform ? b.transform[5] : 0;
+          return bY - aY; // Y décroissant (haut de page vers bas)
+        });
+        
+        // Tolérance de position Y pour considérer que des éléments sont sur la même ligne
+        const yTolerance = 3;
+        
+        for (const item of sortedItems) {
+          if (!item.str) continue;
+          
+          const y = item.transform ? item.transform[5] : 0;
+          
+          // Si on change de ligne (basé sur position Y)
+          if (lastY !== -1 && Math.abs(y - lastY) > yTolerance) {
+            pageText += currentLine.trim() + '\n';
+            currentLine = '';
+          }
+          
+          // Ajouter le texte à la ligne courante
+          currentLine += item.str;
+          lastY = y;
         }
         
-        // Ajouter le texte à la ligne courante
-        currentLine += item.str;
-        lastY = y;
+        // Ajouter la dernière ligne
+        if (currentLine.trim()) {
+          pageText += currentLine.trim() + '\n';
+        }
+        
+        return pageText;
+      } catch (pageError) {
+        console.error(`Error processing page ${pageNum}:`, pageError);
+        return `[Erreur sur la page ${pageNum}]`;
       }
-      
-      // Ajouter la dernière ligne
-      if (currentLine.trim()) {
-        pageText += currentLine.trim() + '\n';
-      }
-      
-      return pageText;
     }
     
     // Race the processing against the timeout
@@ -275,7 +284,7 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
     
     // Amélioration du système de tentatives avec délai progressif
     let attempt = 1;
-    const maxAttempts = 3; // Augmenté de 2 à 3
+    const maxAttempts = 3; // Nombre de tentatives
     
     while (attempt <= maxAttempts) {
       try {
@@ -285,14 +294,16 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
         const arrayBuffer = await file.arrayBuffer();
         const timeout = 15000 * attempt; // 15s, puis 30s, puis 45s
         
-        const loadingPromise = pdfjs.getDocument({ 
+        const loadingOptions = { 
           data: arrayBuffer,
-          cMapUrl: 'https://unpkg.com/pdfjs-dist@5.0.375/cmaps/',
+          cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.0.375/cmaps/',
           cMapPacked: true,
-          // Optimisations
           disableFontFace: true,
           useSystemFonts: false,
-        }).promise;
+          standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.0.375/standard_fonts/',
+        };
+        
+        const loadingPromise = pdfjs.getDocument(loadingOptions).promise;
         
         const pdf = await Promise.race([
           loadingPromise,
@@ -319,7 +330,10 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
         if (attempt === maxAttempts) {
           if (file.size <= 5 * 1024 * 1024) { // 5MB ou moins
             console.log("Échec de validation mais fichier accepté car taille raisonnable");
-            return { isValid: true };
+            return { 
+              isValid: true,
+              reason: "Le fichier n'a pas pu être complètement validé mais sera traité quand même."
+            };
           }
           throw error;
         }
@@ -338,7 +352,7 @@ export async function validatePdfFile(file: File): Promise<{ isValid: boolean; r
     console.error('Error validating PDF file:', error);
     
     // Pour les petits fichiers, on accepte même en cas d'erreur
-    if (file.size <= 2 * 1024 * 1024) { // 2MB ou moins (augmenté de 1 à 2)
+    if (file.size <= 2 * 1024 * 1024) { // 2MB ou moins
       console.log("Validation échouée mais fichier accepté car petit");
       return { isValid: true };
     }
