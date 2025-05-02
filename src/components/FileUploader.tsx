@@ -45,46 +45,89 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setValidationStatus(ProgressStatus.PROCESSING);
     
     try {
-      // Validate PDF files
+      // Pour tout fichier non-PDF (CSV, Excel), on accepte directement
+      const nonPdfFiles = acceptedFiles.filter(file => !file.name.toLowerCase().endsWith('.pdf'));
       const pdfFiles = acceptedFiles.filter(file => file.name.toLowerCase().endsWith('.pdf'));
       
-      for (let i = 0; i < pdfFiles.length; i++) {
-        const file = pdfFiles[i];
-        console.log(`Validation du fichier ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
+      if (nonPdfFiles.length > 0) {
+        console.log(`${nonPdfFiles.length} fichiers non-PDF acceptés sans validation`);
+        setFiles(prev => [...prev, ...nonPdfFiles]);
         
-        // Update progress
-        setProgress(((i + 0.5) / pdfFiles.length) * 100);
-        
-        // Validate the file
-        const validationResult = await validatePdfFile(file);
-        
-        if (!validationResult?.isValid) {
-          const errorMsg = `Validation échouée pour ${file.name}: ${validationResult?.reason || "Erreur inconnue"}`;
-          setValidationError(errorMsg);
-          setValidationStatus(ProgressStatus.ERROR);
-          toast.error(errorMsg);
+        // Si tous les fichiers sont non-PDF, on les accepte directement
+        if (pdfFiles.length === 0) {
           setIsValidating(false);
+          setValidationStatus(ProgressStatus.SUCCESS);
+          onFilesAccepted(nonPdfFiles);
+          toast.success(`${nonPdfFiles.length} fichier(s) ajouté(s) avec succès`);
           return;
         }
-        
-        // Update progress
-        setProgress(((i + 1) / pdfFiles.length) * 100);
       }
       
+      // On continue avec les fichiers PDF
+      if (pdfFiles.length === 0) return;
+      
+      // Validate PDF files with a shorter timeout
+      let validPdfCount = 0;
+      
+      const validationPromises = pdfFiles.map(async (file, index) => {
+        try {
+          // Update progress
+          setProgress(((index + 0.5) / pdfFiles.length) * 100);
+          
+          // Validate the file with a shorter timeout using Promise.race
+          const validationPromise = validatePdfFile(file);
+          const timeoutPromise = new Promise<{isValid: boolean, reason: string}>((resolve) => {
+            setTimeout(() => resolve({
+              isValid: true,  // On accepte le fichier même en cas de timeout
+              reason: "Timeout dépassé mais fichier accepté quand même"
+            }), 10000);
+          });
+          
+          const validationResult = await Promise.race([validationPromise, timeoutPromise]);
+          
+          if (validationResult.isValid) {
+            validPdfCount++;
+            return file;
+          } else {
+            console.warn(`Validation échouée pour ${file.name}: ${validationResult.reason}`);
+            // On accepte quand même le fichier avec un avertissement
+            toast.warning(`Le fichier ${file.name} pourrait poser des problèmes (${validationResult.reason})`);
+            validPdfCount++;
+            return file;
+          }
+        } catch (error) {
+          console.error(`Error validating ${file.name}:`, error);
+          // On accepte quand même le fichier avec un avertissement
+          toast.warning(`Le fichier ${file.name} n'a pas pu être validé mais sera utilisé quand même`);
+          validPdfCount++;
+          return file;
+        } finally {
+          // Update progress
+          setProgress(((index + 1) / pdfFiles.length) * 100);
+        }
+      });
+      
+      const validatedFiles = await Promise.all(validationPromises);
+      const allValidatedFiles = [...nonPdfFiles, ...validatedFiles.filter(Boolean)];
+      
       // Add valid files to state
-      setFiles(prev => [...prev, ...acceptedFiles]);
+      setFiles(prev => [...prev, ...allValidatedFiles]);
       setValidationStatus(ProgressStatus.SUCCESS);
       
       // Return files to parent component
-      onFilesAccepted(acceptedFiles);
+      onFilesAccepted(allValidatedFiles);
       
-      toast.success(`${acceptedFiles.length} fichier(s) ajouté(s) avec succès`);
+      toast.success(`${allValidatedFiles.length} fichier(s) ajouté(s) avec succès`);
     } catch (error) {
-      console.error('Error validating files:', error);
-      const errorMsg = `Erreur lors de la validation des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
-      setValidationError(errorMsg);
+      console.error('Error handling files:', error);
+      setValidationError(`Erreur lors du traitement des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
       setValidationStatus(ProgressStatus.ERROR);
-      toast.error(errorMsg);
+      toast.error("Une erreur s'est produite lors du traitement des fichiers");
+      
+      // Accepter quand même les fichiers en cas d'erreur
+      setFiles(prev => [...prev, ...acceptedFiles]);
+      onFilesAccepted(acceptedFiles);
+      toast.info("Les fichiers ont été acceptés malgré l'erreur");
     } finally {
       setIsValidating(false);
     }
@@ -137,23 +180,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       {isValidating && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">Validation des fichiers...</div>
+            <div className="text-sm text-muted-foreground">Traitement des fichiers...</div>
             <div className="text-sm font-medium">{Math.round(progress)}%</div>
           </div>
           <Progress value={progress} className="h-2" />
-          <p className="text-xs text-muted-foreground">Les fichiers volumineux peuvent prendre du temps à valider</p>
+          <p className="text-xs text-muted-foreground">Les fichiers volumineux peuvent prendre du temps à traiter</p>
         </div>
       )}
       
       {validationError && validationStatus === ProgressStatus.ERROR && (
-        <div className="bg-destructive/10 border border-destructive/30 p-3 rounded-md flex items-start gap-2">
-          <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+        <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-destructive">Erreur de validation</p>
-            <p className="text-xs text-destructive/90">{validationError}</p>
-            <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={retryUpload}>
-              Réessayer avec un autre fichier
-            </Button>
+            <p className="text-sm font-medium text-amber-800">Attention</p>
+            <p className="text-xs text-amber-700">{validationError}</p>
+            <p className="text-xs text-amber-700">Les fichiers ont été acceptés malgré l'erreur.</p>
           </div>
         </div>
       )}
