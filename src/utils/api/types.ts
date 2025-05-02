@@ -31,3 +31,20 @@ export interface AIApiResponse {
   text: string;
   error?: string;
 }
+
+// Statut de progression pour les opérations longues
+export enum ProgressStatus {
+  IDLE = 'idle',
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  SUCCESS = 'success',
+  ERROR = 'error'
+}
+
+// Type pour les messages d'erreur détaillés
+export interface ProcessingError {
+  code: string;
+  message: string;
+  details?: string;
+  retry?: boolean;
+}
