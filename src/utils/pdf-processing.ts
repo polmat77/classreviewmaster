@@ -1,4 +1,3 @@
-
 import * as pdfjs from 'pdfjs-dist';
 import { toast } from 'sonner';
 import { OpenAIService } from './openai-service';
@@ -73,8 +72,16 @@ export async function parseGradeTable(
       pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
     }
     
-    const loadingTask = pdfjs.getDocument({ data: pdfBuffer });
-    const pdf = await loadingTask.promise;
+    // Ajout d'un timeout pour éviter un blocage indéfini
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Le chargement du PDF a pris trop de temps")), 30000); // 30 secondes
+    });
+    
+    // Création de la promesse de chargement
+    const loadingPromise = pdfjs.getDocument({ data: pdfBuffer }).promise;
+    
+    // Utilise Promise.race pour avoir une limite de temps
+    const pdf = await Promise.race([loadingPromise, timeoutPromise]);
     
     console.log(`PDF loaded with ${pdf.numPages} pages`);
     
@@ -154,7 +161,7 @@ export async function parseGradeTable(
     };
   } catch (error) {
     console.error('Error in parseGradeTable:', error);
-    throw new Error(`Erreur lors de l'analyse du tableau de notes: ${error.message || 'Erreur inconnue'}`);
+    throw new Error(`Erreur lors de l'analyse du tableau de notes: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
   } finally {
     console.timeEnd("Grade Table Parsing");
   }
@@ -207,7 +214,7 @@ function groupTextIntoLines(textItems: Array<{ text: string; x: number; y: numbe
  * Find the header row in the table
  */
 function findHeaderRow(lines: Array<Array<{ text: string; x: number; y: number; page: number }>>) {
-  const headerKeywords = ['nom', 'élève', 'élèves', 'prénom', 'matière', 'matières', 'moyenne'];
+  const headerKeywords = ['nom', 'élève', 'élèves', 'prénom', 'matière', 'matières', 'moyenne', 'moy'];
   
   for (const line of lines) {
     // Check if line has at least some of the header keywords
@@ -217,6 +224,14 @@ function findHeaderRow(lines: Array<Array<{ text: string; x: number; y: number; 
       if (line.length >= 3) {
         return line;
       }
+    }
+  }
+  
+  // Si aucun en-tête n'est trouvé avec les mots-clés, essayer de détecter un modèle de ligne avec "Moy" répété
+  for (const line of lines) {
+    const moyCount = line.filter(item => item.text === 'Moy').length;
+    if (moyCount >= 3) {  // Si nous trouvons plusieurs "Moy" sur une ligne, c'est probablement l'en-tête du tableau
+      return line;
     }
   }
   
@@ -240,11 +255,20 @@ function identifyColumns(headerRow: Array<{ text: string; x: number; y: number; 
     
     if (text.includes('nom') || text.includes('élève') || text.includes('prénom')) {
       type = 'name';
-    } else if (text.includes('moyenne') && (text.includes('général') || text.includes('classe'))) {
+    } else if ((text.includes('moyenne') || text === 'moy') && 
+              (text.includes('général') || text.includes('classe'))) {
       type = 'average';
     } else if (!text.includes('rang') && !text.includes('total')) {
       // Assume it's a subject if it's not any of the special columns
-      type = 'subject';
+      // Dans le format spécifique du Collège Romain Rolland, nous avons 'Moy' sous chaque matière
+      if (text === 'moy' || text.startsWith('moy')) {
+        type = 'subject';
+      } else {
+        // Vérifier si c'est un nom de matière (en majuscules généralement)
+        if (item.text === item.text.toUpperCase() && item.text.length > 1) {
+          type = 'subject';
+        }
+      }
     }
     
     // Calculate approximate width based on next column
@@ -282,11 +306,12 @@ function extractDataRows(
   if (headerIndex === -1) return [];
   
   // Get lines after the header, filter out any that look like headers again
+  // ou des lignes qui semblent être des moyennes de classe (contenant 'Moyenne de classe')
   const dataLines = lines
     .slice(headerIndex + 1)
     .filter(line => {
       const lineText = line.map(item => item.text.toLowerCase()).join(' ');
-      return !lineText.includes('moyenne') && !lineText.includes('total') && line.length > 1;
+      return !lineText.includes('moyenne de classe') && !lineText.includes('total') && line.length > 1;
     });
   
   // Process each data line to assign values to the right columns
@@ -318,37 +343,62 @@ function createStudentObjects(
   dataRows: Array<Map<string, string>>,
   columns: Array<{ type: string; text: string; x: number; width?: number }>
 ) {
+  // Trouver la colonne qui correspond au nom des élèves
   const nameColumn = columns.find(col => col.type === 'name');
-  const averageColumn = columns.find(col => col.type === 'average');
-  const subjectColumns = columns.filter(col => col.type === 'subject');
   
-  if (!nameColumn) {
+  // Si aucune colonne de nom n'est trouvée, cherchons la première colonne
+  // qui pourrait contenir les noms d'élèves (souvent la première colonne)
+  let nameColumnText = nameColumn?.text;
+  if (!nameColumnText && columns.length > 0) {
+    nameColumnText = columns[0].text;
+    console.log("Aucune colonne de nom explicite trouvée, utilisation de la première colonne comme noms d'élèves");
+  }
+  
+  if (!nameColumnText) {
     throw new Error("Impossible de trouver la colonne du nom dans le tableau");
   }
   
+  // Trouver la colonne de moyenne générale
+  const averageColumn = columns.find(col => col.type === 'average');
+  
+  // Trouver les colonnes de matières (sujets)
+  const subjectColumns = columns.filter(col => col.type === 'subject');
+  
   return dataRows
-    .filter(row => row.get(nameColumn.text)?.trim())
+    .filter(row => row.get(nameColumnText!)?.trim())
     .map(row => {
-      const name = row.get(nameColumn.text) || '';
+      const name = row.get(nameColumnText!) || '';
       
       // Extract grades for each subject
       const grades: { [subject: string]: number | null } = {};
       subjectColumns.forEach(col => {
         const gradeText = row.get(col.text);
         
-        if (!gradeText || gradeText.includes('Abs')) {
+        // Amélioration: Gestion spéciale des valeurs "Abs" pour les absences
+        if (!gradeText || gradeText.trim() === '' || gradeText.includes('Abs')) {
           grades[col.text] = null;
         } else {
           // Convert to number, handling French number format (comma as decimal)
-          grades[col.text] = parseFloat(gradeText.replace(',', '.')) || null;
+          try {
+            const cleanedText = gradeText.replace(',', '.').trim();
+            const parsedValue = parseFloat(cleanedText);
+            grades[col.text] = !isNaN(parsedValue) ? parsedValue : null;
+          } catch (e) {
+            console.warn(`Impossible de convertir "${gradeText}" en nombre pour ${name} en ${col.text}`);
+            grades[col.text] = null;
+          }
         }
       });
       
       // Extract student average if available
       let average: number | undefined = undefined;
       if (averageColumn && row.get(averageColumn.text)) {
-        const avgText = row.get(averageColumn.text) || '';
-        average = parseFloat(avgText.replace(',', '.')) || undefined;
+        try {
+          const avgText = row.get(averageColumn.text) || '';
+          average = parseFloat(avgText.replace(',', '.')) || undefined;
+        } catch (e) {
+          console.warn(`Impossible de convertir la moyenne pour ${name}`);
+        }
       } else {
         // Calculate average from available grades
         const validGrades = Object.values(grades).filter(g => g !== null) as number[];
@@ -369,9 +419,31 @@ function createStudentObjects(
  * Identify subjects from column headers
  */
 function identifySubjects(columns: Array<{ type: string; text: string; x: number; width?: number }>) {
-  return columns
-    .filter(col => col.type === 'subject')
-    .map(col => col.text);
+  // Dans le format du Collège Romain Rolland, nous avons des colonnes avec "Moy" sous les noms de matières
+  // Nous devons donc récupérer les noms de matières correctement
+  
+  // Regrouper les colonnes identifiées comme sujets
+  const subjectColumns = columns.filter(col => col.type === 'subject');
+  
+  // Récupérer les noms de matières à partir des colonnes
+  return subjectColumns.map(col => {
+    // Si la colonne contient "Moy", essayons de trouver la matière correspondante
+    // Dans notre cas, Moy est sous le nom de la matière
+    if (col.text.toLowerCase() === 'moy') {
+      // Chercher dans les colonnes qui précèdent pour trouver le nom de la matière
+      // On prend l'index actuel de la colonne dans le tableau des colonnes
+      const currentIndex = columns.findIndex(c => c.text === col.text && c.x === col.x);
+      if (currentIndex > 0) {
+        // Vérifier si la colonne précédente pourrait être un nom de matière
+        const prevColumn = columns[currentIndex - 1];
+        if (prevColumn.text === prevColumn.text.toUpperCase() && prevColumn.text.length > 1) {
+          return prevColumn.text;
+        }
+      }
+    }
+    
+    return col.text;
+  });
 }
 
 /**
@@ -382,6 +454,7 @@ function extractClassName(textItems: Array<{ text: string; x: number; y: number;
   const classPatterns = [
     /classe\s+de\s+(\d+[A-Za-z]*)/i,
     /classe\s*:\s*(\d+[A-Za-z]*)/i,
+    /classe\s*(\d+[A-Za-z]*)/i,
     /^(\d+[A-Za-z]*)$/
   ];
   
@@ -390,6 +463,17 @@ function extractClassName(textItems: Array<{ text: string; x: number; y: number;
       const match = item.text.match(pattern);
       if (match) {
         return match[1];
+      }
+    }
+  }
+  
+  // Recherche spécifique pour le format du Collège Romain Rolland
+  for (const item of textItems) {
+    // Chercher quelque chose comme "Classe : 33"
+    if (item.text.includes("Classe :") || item.text.includes("Classe :")) {
+      const classValue = item.text.split(":")[1]?.trim();
+      if (classValue) {
+        return classValue;
       }
     }
   }
@@ -757,12 +841,19 @@ function detectClassBulletinFormat(structuredPages: any[]): boolean {
   const matiereFound = items.some((item: any) => /matière/i.test(item.text));
   const appreciationFound = items.some((item: any) => /appréciation/i.test(item.text));
   
+  // Vérifier si c'est un tableau de moyennes du Collège Romain Rolland
+  const isRomainRollandFormat = items.some((item: any) => 
+    /COLLEGE ROMAIN ROLLAND/i.test(item.text)
+  ) || items.some((item: any) => 
+    /Tableau des moyennes/i.test(item.text)
+  );
+  
   // Si on trouve au moins deux indicateurs, c'est probablement un bulletin de classe
-  const indicators = [bulletinHeaderFound, tableStyleDetected, matiereFound, appreciationFound];
+  const indicators = [bulletinHeaderFound, tableStyleDetected, matiereFound, appreciationFound, isRomainRollandFormat];
   const scoreThreshold = 2;
   const score = indicators.filter(Boolean).length;
   
-  console.log(`Format detection - Score: ${score}/${scoreThreshold} (bulletin: ${bulletinHeaderFound}, table: ${tableStyleDetected}, matière: ${matiereFound}, appréciations: ${appreciationFound})`);
+  console.log(`Format detection - Score: ${score}/${scoreThreshold} (bulletin: ${bulletinHeaderFound}, table: ${tableStyleDetected}, matière: ${matiereFound}, appréciations: ${appreciationFound}, Romain Rolland: ${isRomainRollandFormat})`);
   
   return score >= scoreThreshold;
 }
@@ -898,6 +989,15 @@ function extractBulletinHeader(structuredPages: any[]): any {
     headerInfo.schoolName = schoolNameItems[0].text;
   }
   
+  // Détecter s'il s'agit du Collège Romain Rolland
+  const romainRollandItems = items.filter((item: any) => 
+    /COLLEGE ROMAIN ROLLAND/i.test(item.text)
+  );
+  
+  if (romainRollandItems.length > 0) {
+    headerInfo.schoolName = "COLLEGE ROMAIN ROLLAND";
+  }
+  
   // Rechercher le trimestre
   const termRegex = /bulletin du (\d+(?:er|ème|e)? trimestre)/i;
   for (const item of items) {
@@ -908,8 +1008,18 @@ function extractBulletinHeader(structuredPages: any[]): any {
     }
   }
   
+  // Vérifier s'il y a une période spécifiée
+  const periodeRegex = /Période\s*:\s*([^,\n]+)/i;
+  const periodeItems = items.filter((item: any) => periodeRegex.test(item.text));
+  if (periodeItems.length > 0) {
+    const match = periodeItems[0].text.match(periodeRegex);
+    if (match) {
+      headerInfo.term = match[1].trim();
+    }
+  }
+  
   // Rechercher l'année scolaire
-  const yearRegex = /année(?:\s+scolaire)?\s+:?\s*(20\d{2}[\/\-]20\d{2})/i;
+  const yearRegex = /année(?:\s+scolaire)?\s*:?\s*(20\d{2}[\/\-]20\d{2})/i;
   for (const item of items) {
     const match = item.text.match(yearRegex);
     if (match) {
@@ -1081,7 +1191,8 @@ function isSubjectName(text: string): boolean {
     'SVT', 'SCIENCES', 'EPS', 'SPORT', 'TECHNOLOGIE', 'MUSIQUE',
     'ARTS', 'PHILOSOPHIE', 'ÉCONOMIE', 'INFORMATIQUE', 'LATIN',
     'HISTOIRE-GÉOGRAPHIE', 'PHYSIQUE-CHIMIE', 'EDUCATION MUSICALE',
-    'ARTS PLASTIQUES', 'POLE SCIENCES', 'POLE LITTERAIRE'
+    'ARTS PLASTIQUES', 'POLE SCIENCES', 'POLE LITTERAIRE', 'ITALIEN BILANGUE',
+    'LANGUES VIVANTES', 'LV1', 'LV2'
   ];
   
   // Vérifier si le texte correspond à une matière commune
