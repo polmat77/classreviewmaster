@@ -287,35 +287,42 @@ function generateAnalysisData(
     };
   });
   
-  // Calculate grade distribution
+  // Calculate grade distribution with more precise categories
   const distribution = [
     { 
-      category: 'Excellent', 
-      count: countStudentsInRange(currentTerm.students, 16, 20),
-      color: '#2dd4bf',
-      criteria: '≥ 16/20',
-      characteristics: 'Maîtrise parfaite, excellente autonomie'
-    },
-    { 
-      category: 'Assez bon', 
-      count: countStudentsInRange(currentTerm.students, 14, 15.9),
-      color: '#4ade80',
-      criteria: '14-15,9/20',
-      characteristics: 'Bonne maîtrise, travail régulier'
-    },
-    { 
-      category: 'Moyen', 
-      count: countStudentsInRange(currentTerm.students, 10, 13.9),
-      color: '#facc15',
-      criteria: '10-13,9/20',
-      characteristics: 'Maîtrise partielle, manque de régularité'
+      category: 'Très en difficulté', 
+      count: countStudentsInRange(currentTerm.students, 0, 4.99),
+      color: '#ef4444',
+      criteria: '0-4,99/20',
+      characteristics: 'Difficultés majeures, besoin d\'aide personnalisée'
     },
     { 
       category: 'En difficulté', 
-      count: countStudentsInRange(currentTerm.students, 0, 9.9),
-      color: '#f87171',
-      criteria: '< 10/20',
+      count: countStudentsInRange(currentTerm.students, 5, 9.99),
+      color: '#f97316',
+      criteria: '5-9,99/20',
       characteristics: 'Difficultés importantes, lacunes à combler'
+    },
+    { 
+      category: 'Moyens', 
+      count: countStudentsInRange(currentTerm.students, 10, 12.99),
+      color: '#facc15',
+      criteria: '10-12,99/20',
+      characteristics: 'Niveau passable, besoin de régularité'
+    },
+    { 
+      category: 'Assez bons', 
+      count: countStudentsInRange(currentTerm.students, 13, 14.99),
+      color: '#84cc16',
+      criteria: '13-14,99/20',
+      characteristics: 'Bon niveau, travail régulier'
+    },
+    { 
+      category: 'Bons à excellents', 
+      count: countStudentsInRange(currentTerm.students, 15, 20),
+      color: '#3b82f6',
+      criteria: '15-20/20',
+      characteristics: 'Très bon niveau, excellente maîtrise'
     }
   ];
   
@@ -331,13 +338,13 @@ function generateAnalysisData(
     }
   ];
   
-  // Calculate categories counts
+  // Calculate categories counts with more precise ranges
   const categories = {
-    excellent: countStudentsInRange(currentTerm.students, 16, 20),
-    good: countStudentsInRange(currentTerm.students, 14, 15.9),
-    average: countStudentsInRange(currentTerm.students, 10, 13.9),
-    struggling: countStudentsInRange(currentTerm.students, 8, 9.9),
-    veryStruggling: countStudentsInRange(currentTerm.students, 0, 7.9)
+    veryStruggling: countStudentsInRange(currentTerm.students, 0, 4.99),
+    struggling: countStudentsInRange(currentTerm.students, 5, 9.99),
+    average: countStudentsInRange(currentTerm.students, 10, 12.99),
+    good: countStudentsInRange(currentTerm.students, 13, 14.99),
+    excellent: countStudentsInRange(currentTerm.students, 15, 20)
   };
   
   // Generate analysis points

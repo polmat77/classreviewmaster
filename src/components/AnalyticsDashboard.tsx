@@ -1,234 +1,118 @@
 
-import React from 'react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Legend 
-} from 'recharts';
-import { cn } from '@/lib/utils';
-import { ChevronUp, ChevronDown, Minus, TrendingUp, Users, BookOpen } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Card } from '@/components/ui/card';
+import StatisticalAnalysis from './StatisticalAnalysis';
 
 interface AnalyticsDashboardProps {
-  data?: any;
-  className?: string;
+  data: any;
 }
 
-// Mock data - would be replaced with actual data from CSV imports
-const mockData = {
-  averages: [
-    { name: 'T1', moyenne: 11.8 },
-    { name: 'T2', moyenne: 12.4 },
-    { name: 'T3', moyenne: 13.2 },
-  ],
-  distribution: [
-    { 
-      category: 'Excellent', 
-      count: 5, 
-      color: '#2dd4bf',
-      criteria: '≥ 16/20',
-      characteristics: 'Maîtrise parfaite, excellente autonomie'
-    },
-    { 
-      category: 'Assez bon', 
-      count: 12, 
-      color: '#4ade80',
-      criteria: '14-15,9/20',
-      characteristics: 'Bonne maîtrise, travail régulier'
-    },
-    { 
-      category: 'Moyen', 
-      count: 8, 
-      color: '#facc15',
-      criteria: '10-13,9/20',
-      characteristics: 'Maîtrise partielle, manque de régularité'
-    },
-    { 
-      category: 'En difficulté', 
-      count: 3, 
-      color: '#f87171',
-      criteria: '< 10/20',
-      characteristics: 'Difficultés importantes, lacunes à combler'
-    }
-  ],
-  subjects: [
-    { name: 'Français', current: 12.4, previous: 11.8, change: 0.6 },
-    { name: 'Mathématiques', current: 11.2, previous: 12.1, change: -0.9 },
-    { name: 'Histoire-Géo', current: 13.8, previous: 12.9, change: 0.9 },
-    { name: 'SVT', current: 14.1, previous: 13.5, change: 0.6 },
-    { name: 'Anglais', current: 13.5, previous: 13.6, change: -0.1 },
-  ]
-};
+const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ data }) => {
+  const categories = useMemo(() => {
+    return [
+      {
+        category: "Très en difficulté",
+        range: "0 → 4.99",
+        count: data.categories.veryStruggling || 0,
+        evolution: null,
+        color: "#ef4444"
+      },
+      {
+        category: "En difficulté",
+        range: "5 → 9.99",
+        count: data.categories.struggling || 0,
+        evolution: 2,
+        color: "#f97316"
+      },
+      {
+        category: "Moyens",
+        range: "10 → 12.99",
+        count: data.categories.average || 0,
+        evolution: -2,
+        color: "#eab308"
+      },
+      {
+        category: "Assez bons",
+        range: "13 → 14.99",
+        count: data.categories.good || 0,
+        evolution: 1,
+        color: "#84cc16"
+      },
+      {
+        category: "Bons à excellents",
+        range: "15 → 20",
+        count: data.categories.excellent || 0,
+        evolution: -1,
+        color: "#3b82f6"
+      }
+    ];
+  }, [data.categories]);
 
-const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ 
-  data, 
-  className 
-}) => {
-  // Make sure we have valid data or fall back to mock data
-  const dashboardData = data || mockData;
-  
-  // Ensure all required data structures exist
-  const averages = dashboardData.averages || mockData.averages;
-  const distribution = dashboardData.distribution || mockData.distribution;
-  const subjects = dashboardData.subjects || mockData.subjects;
-  
-  const getChangeColor = (change: number) => {
-    if (change > 0.2) return 'text-green-500';
-    if (change < -0.2) return 'text-red-500';
-    return 'text-yellow-500';
-  };
-  
-  const getChangeIcon = (change: number) => {
-    if (change > 0.2) return <ChevronUp className="h-4 w-4" />;
-    if (change < -0.2) return <ChevronDown className="h-4 w-4" />;
-    return <Minus className="h-4 w-4" />;
-  };
-  
+  const termAverages = useMemo(() => {
+    // Extract term data from the previous terms plus current term
+    const terms = [
+      ...(Array.isArray(data.previousTerms) ? data.previousTerms : []),
+      {
+        term: data.currentTerm.term,
+        classAverage: data.currentTerm.classAverage
+      }
+    ];
+    
+    return terms.map((term, index) => {
+      // Calculate evolution for terms after the first one
+      const evolution = index > 0 ? 
+        Number((term.classAverage - terms[index - 1].classAverage).toFixed(2)) : null;
+      
+      return {
+        term: term.term,
+        average: term.classAverage,
+        evolution: evolution
+      };
+    });
+  }, [data.previousTerms, data.currentTerm]);
+
+  const subjectAverages = useMemo(() => {
+    const allTermsWithData = [
+      ...(Array.isArray(data.previousTerms) ? data.previousTerms.map(t => t.term) : []),
+      data.currentTerm.term
+    ];
+
+    // Get all subjects from the current term
+    const subjects = data.subjects || [];
+    
+    return subjects.map(subject => {
+      const averages = {};
+      
+      // For each term, find the corresponding average for this subject
+      allTermsWithData.forEach((term, index) => {
+        const shortTerm = `T${index + 1}`;
+        
+        if (index === allTermsWithData.length - 1) {
+          // Current term
+          averages[shortTerm] = subject.current;
+        } else {
+          // Previous terms
+          averages[shortTerm] = subject.previous || 0;
+        }
+      });
+      
+      return {
+        name: subject.name,
+        averages,
+        evolution: subject.change
+      };
+    });
+  }, [data.subjects, data.previousTerms, data.currentTerm]);
+
   return (
-    <div className={cn("space-y-6", className)}>
-      <div className="glass-panel p-5 space-y-4 animate-slide-up" style={{ "--index": 1 } as React.CSSProperties}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Évolution de la moyenne générale</h3>
-          <div className="bg-primary/10 rounded-full p-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-          </div>
-        </div>
-        
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={averages}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fill: '#888', fontSize: 12 }}
-                axisLine={{ stroke: '#e5e7eb' }}
-              />
-              <YAxis 
-                domain={[0, 20]} 
-                tick={{ fill: '#888', fontSize: 12 }}
-                axisLine={{ stroke: '#e5e7eb' }}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'rgba(255, 255, 255, 0.9)', 
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                  border: 'none'
-                }}
-                labelStyle={{ fontWeight: 500 }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="moyenne" 
-                stroke="hsl(var(--primary))" 
-                activeDot={{ r: 6 }}
-                strokeWidth={2}
-                dot={{ fill: "hsl(var(--primary))", strokeWidth: 2 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      
-      <div className="glass-panel p-5 space-y-4 animate-slide-up" style={{ "--index": 2 } as React.CSSProperties}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Répartition des élèves</h3>
-          <div className="bg-primary/10 rounded-full p-2">
-            <Users className="h-5 w-5 text-primary" />
-          </div>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] border-collapse">
-            <thead>
-              <tr className="bg-secondary/50">
-                <th className="p-3 text-left text-sm font-medium">Niveau</th>
-                <th className="p-3 text-left text-sm font-medium">Nombre d'élèves</th>
-                <th className="p-3 text-left text-sm font-medium">Critères</th>
-                <th className="p-3 text-left text-sm font-medium">Caractéristiques</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {distribution.map((item: any, index: number) => (
-                <tr 
-                  key={index} 
-                  className="hover:bg-secondary/30 transition-colors"
-                >
-                  <td className="p-3">
-                    <div className="flex items-center">
-                      <div 
-                        className="w-3 h-3 rounded-full mr-2" 
-                        style={{ backgroundColor: item.color }}
-                      ></div>
-                      <span className="font-medium">{item.category}</span>
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex items-center">
-                      <div className="w-full bg-secondary rounded-full h-2 mr-2">
-                        <div 
-                          className="h-2 rounded-full" 
-                          style={{ 
-                            width: `${(item.count / distribution.reduce((acc: number, curr: any) => acc + curr.count, 0)) * 100}%`,
-                            backgroundColor: item.color 
-                          }}
-                        ></div>
-                      </div>
-                      <span className="whitespace-nowrap">{item.count} élèves</span>
-                    </div>
-                  </td>
-                  <td className="p-3 text-sm">{item.criteria}</td>
-                  <td className="p-3 text-sm text-muted-foreground">{item.characteristics}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      <div className="glass-panel p-5 space-y-4 animate-slide-up" style={{ "--index": 3 } as React.CSSProperties}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Performance par matière</h3>
-          <div className="bg-primary/10 rounded-full p-2">
-            <BookOpen className="h-5 w-5 text-primary" />
-          </div>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[500px]">
-            <thead className="text-left border-b">
-              <tr>
-                <th className="pb-3 font-medium text-sm">Matière</th>
-                <th className="pb-3 font-medium text-sm text-right">Moyenne actuelle</th>
-                <th className="pb-3 font-medium text-sm text-right">Trimestre précédent</th>
-                <th className="pb-3 font-medium text-sm text-right">Évolution</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {subjects.map((subject: any, index: number) => (
-                <tr key={index} className="hover:bg-secondary/30 transition-colors">
-                  <td className="py-3 text-sm font-medium">{subject.name}</td>
-                  <td className="py-3 text-sm text-right">{subject.current}</td>
-                  <td className="py-3 text-sm text-right text-muted-foreground">{subject.previous}</td>
-                  <td className="py-3 text-sm text-right">
-                    <div className={cn("flex items-center justify-end", getChangeColor(subject.change))}>
-                      {getChangeIcon(subject.change)}
-                      <span className="ml-1">{subject.change > 0 ? '+' : ''}{subject.change.toFixed(1)}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <Card className="p-6">
+        <StatisticalAnalysis 
+          categories={categories}
+          termAverages={termAverages}
+          subjectAverages={subjectAverages}
+        />
+      </Card>
     </div>
   );
 };

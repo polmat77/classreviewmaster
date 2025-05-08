@@ -65,7 +65,16 @@ export async function parseGradeTable(
     }
     
     // Load PDF with pdfjs
-    const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
+    // Make sure the worker is properly loaded
+    const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+    
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+    }
+    
+    const loadingTask = pdfjs.getDocument({ data: pdfBuffer });
+    const pdf = await loadingTask.promise;
+    
     console.log(`PDF loaded with ${pdf.numPages} pages`);
     
     // Set PDF loading complete (40% of total progress)
@@ -74,25 +83,26 @@ export async function parseGradeTable(
       onProgress(overallProgress);
     }
     
+    // Extract text with position information for better table reconstruction
     const textItems: Array<{ text: string; x: number; y: number; page: number }> = [];
     const totalPages = pdf.numPages;
 
     // Extract text with coordinates from all pages
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      // Only log every few pages for large documents
-      if (pageNum === 1 || pageNum === totalPages || pageNum % 5 === 0) {
-        console.log(`Processing page ${pageNum} of ${totalPages}`);
-      }
-      
       const page = await pdf.getPage(pageNum);
-      const content = await page.getTextContent();
-      content.items.forEach((item: any) => {
-        if (item.str) {
-          // Capture text and its position
+      const textContent = await page.getTextContent();
+      const viewport = page.getViewport({ scale: 1.0 });
+      
+      textContent.items.forEach((item: any) => {
+        if (item.str && item.str.trim()) {
+          // Use transform to get more accurate positions
+          const tx = item.transform[4];
+          const ty = viewport.height - item.transform[5]; // Adjust Y coordinate
+          
           textItems.push({
-            text: item.str,
-            x: item.transform[4],    // horizontal position
-            y: item.transform[5],    // vertical position
+            text: item.str.trim(),
+            x: tx,
+            y: ty,
             page: pageNum
           });
         }
@@ -104,137 +114,37 @@ export async function parseGradeTable(
 
     console.log(`Extracted ${textItems.length} text items from PDF`);
 
-    // Group items by line (y-coordinate, within a tolerance to account for minor differences)
-    const rowsMap = new Map<number, Array<{ text: string; x: number }>>();
-    const yTolerance = 5;
-    for (const item of textItems) {
-      // Use page number to avoid mixing lines across pages
-      const key = Math.round(item.y / yTolerance) + item.page * 10000;
-      if (!rowsMap.has(key)) {
-        rowsMap.set(key, []);
-      }
-      rowsMap.get(key)!.push({ text: item.text, x: item.x });
-    }
+    // Try to identify tables in the document by grouping text by Y-coordinate proximity
+    // This uses a more precise algorithm to recognize table structures
+    const groupedLines = groupTextIntoLines(textItems);
+    console.log(`Identified ${groupedLines.length} potential table rows`);
     
-    // Sort rows by their Y (to go top-down)
-    const sortedRowKeys = Array.from(rowsMap.keys()).sort((a, b) => b - a);
-    const rows = sortedRowKeys.map(yKey => {
-      const rowItems = rowsMap.get(yKey)!;
-      // Sort items in the row by X (left-to-right)
-      rowItems.sort((a, b) => a.x - b.x);
-      // Map to just the text
-      const rowText = rowItems.map(cell => cell.text.trim());
-      return rowText;
-    });
-
-    console.log(`Reconstructed ${rows.length} rows from PDF`);
-
-    // Identify header row by searching for a known column identifier
-    let header: string[] = [];
-    let headerIndex = -1;
-    
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const headerLine = row.map(cell => cell.toLowerCase()).join(" ");
-      if (headerLine.includes("nom") || headerLine.includes("élève")) {
-        header = row;
-        headerIndex = i;
-        break;
-      }
-    }
-    
-    if (header.length === 0) {
+    // Find header row by looking for keywords
+    const headerRow = findHeaderRow(groupedLines);
+    if (!headerRow) {
       throw new Error("Impossible de trouver l'en-tête du tableau dans ce PDF.");
     }
-
-    // Determine index of the name column and subject columns
-    const nameColIndex = header.findIndex(col => 
-      col.toLowerCase().includes("nom") || col.toLowerCase().includes("élève")
-    );
     
-    if (nameColIndex === -1) {
-      throw new Error("Impossible d'identifier la colonne du nom dans le tableau.");
-    }
+    console.log("Found header row:", headerRow.map(item => item.text).join(", "));
     
-    const subjects: string[] = [];
-    header.forEach((colText, idx) => {
-      if (idx !== nameColIndex && 
-          !colText.toLowerCase().includes("moyenne") &&
-          !colText.toLowerCase().includes("total") &&
-          !colText.toLowerCase().includes("rang")) {
-        subjects.push(colText.trim() || `Matière ${idx}`); // Use placeholder if blank
-      }
-    });
-
-    console.log(`Identified ${subjects.length} subjects in table`);
-
-    const students: StudentGrades[] = [];
+    // Identify columns based on header
+    const columns = identifyColumns(headerRow);
+    console.log("Identified columns:", columns);
     
-    // Process student rows (skip the header)
-    for (let i = headerIndex + 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (row.length === 0) continue;
-      if (nameColIndex >= row.length) continue;  // Row too short to contain name
-      
-      const rawName = row[nameColIndex].trim();
-      if (!rawName || rawName.toLowerCase().includes("nom") || rawName.toLowerCase().includes("élève")) {
-        // Skip header or invalid name
-        continue;
-      }
-      
-      // Some PDFs might include class or other info in name cell; we keep just the name
-      const name = rawName.replace(/\b3\d\b/g, "").trim();  // E.g., remove class code like "33" if present
-      const grades: {[subject: string]: number | null} = {};
-      let total = 0, count = 0;
-
-      subjects.forEach((subject, sIdx) => {
-        // Find corresponding cell in the row 
-        // If header and row length are the same, use index offset for alignment
-        let gradeValue: number | null = null;
-        const dataColIndex = row.length === header.length ? 
-          (nameColIndex < sIdx ? sIdx + 1 : sIdx) : // Adjust if name column shifts index
-          sIdx + 1;
-        
-        if (dataColIndex < row.length) {
-          const cellText = row[dataColIndex].trim();
-          if (cellText === "" || /Abs\b/i.test(cellText)) {
-            gradeValue = null; // absent or missing grade
-          } else {
-            // Replace comma with dot for decimal, and parse
-            const num = parseFloat(cellText.replace(',', '.'));
-            gradeValue = isNaN(num) ? null : num;
-          }
-        }
-        
-        grades[subject] = gradeValue;
-        if (gradeValue !== null) {
-          total += gradeValue;
-          count++;
-        }
-      });
-
-      const average = count > 0 ? parseFloat((total / count).toFixed(2)) : undefined;
-      students.push({ name, grades, average });
-    }
-
-    console.log(`Parsed ${students.length} students with grade data`);
-
-    // Extract class name if available
-    let className = "Inconnu";
-    for (let i = 0; i < Math.min(headerIndex, 5); i++) {
-      const rowText = rows[i].join(" ");
-      const classMatch = rowText.match(/classe\s*:?\s*(\S+)/i);
-      if (classMatch) {
-        className = classMatch[1];
-        break;
-      }
-    }
-
-    console.timeEnd("Grade Table Parsing");
+    // Extract data rows based on the identified structure
+    const dataRows = extractDataRows(groupedLines, headerRow, columns);
+    console.log(`Extracted ${dataRows.length} data rows`);
     
-    if (onProgress) {
-      onProgress(100); // Parsing complete
-    }
+    // Process the data rows to create student objects
+    const students = createStudentObjects(dataRows, columns);
+    console.log(`Created ${students.length} student objects`);
+    
+    // Identify subjects from columns
+    const subjects = identifySubjects(columns);
+    console.log(`Identified ${subjects.length} subjects: ${subjects.join(", ")}`);
+    
+    // Determine class information
+    const className = extractClassName(textItems);
     
     return {
       className,
@@ -242,9 +152,248 @@ export async function parseGradeTable(
       students
     };
   } catch (error) {
-    console.error('Error parsing grade table PDF:', error);
-    throw new Error(`Erreur lors de l'analyse du tableau des notes: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    console.error('Error in parseGradeTable:', error);
+    throw new Error(`Erreur lors de l'analyse du tableau de notes: ${error.message || 'Erreur inconnue'}`);
+  } finally {
+    console.timeEnd("Grade Table Parsing");
   }
+}
+
+/**
+ * Group text items into lines based on Y-coordinate proximity
+ */
+function groupTextIntoLines(textItems: Array<{ text: string; x: number; y: number; page: number }>) {
+  // Sort by page and Y coordinate
+  const sortedItems = [...textItems].sort((a, b) => {
+    if (a.page !== b.page) return a.page - b.page;
+    return Math.abs(a.y - b.y) < 5 ? a.x - b.x : a.y - b.y;
+  });
+  
+  const lines: Array<typeof textItems> = [];
+  let currentLine: typeof textItems = [];
+  let currentY = -1;
+  let currentPage = -1;
+  
+  for (const item of sortedItems) {
+    if (currentPage === -1) {
+      // First item
+      currentLine = [item];
+      currentY = item.y;
+      currentPage = item.page;
+    } else if (item.page !== currentPage || Math.abs(item.y - currentY) > 10) {
+      // New page or new line (Y difference > 10)
+      if (currentLine.length > 0) {
+        lines.push([...currentLine].sort((a, b) => a.x - b.x));
+      }
+      currentLine = [item];
+      currentY = item.y;
+      currentPage = item.page;
+    } else {
+      // Same line
+      currentLine.push(item);
+    }
+  }
+  
+  // Don't forget the last line
+  if (currentLine.length > 0) {
+    lines.push([...currentLine].sort((a, b) => a.x - b.x));
+  }
+  
+  return lines;
+}
+
+/**
+ * Find the header row in the table
+ */
+function findHeaderRow(lines: Array<Array<{ text: string; x: number; y: number; page: number }>>) {
+  const headerKeywords = ['nom', 'élève', 'élèves', 'prénom', 'matière', 'matières', 'moyenne'];
+  
+  for (const line of lines) {
+    // Check if line has at least some of the header keywords
+    const lineText = line.map(item => item.text.toLowerCase()).join(' ');
+    if (headerKeywords.some(keyword => lineText.includes(keyword))) {
+      // Make sure the line has at least 3 items (likely a table header)
+      if (line.length >= 3) {
+        return line;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Identify and categorize columns from the header row
+ */
+function identifyColumns(headerRow: Array<{ text: string; x: number; y: number; page: number }>) {
+  const columns: {
+    type: 'name' | 'subject' | 'average' | 'other';
+    text: string;
+    x: number;
+    width?: number;
+  }[] = [];
+  
+  headerRow.forEach((item, index) => {
+    let type: 'name' | 'subject' | 'average' | 'other' = 'other';
+    const text = item.text.toLowerCase();
+    
+    if (text.includes('nom') || text.includes('élève') || text.includes('prénom')) {
+      type = 'name';
+    } else if (text.includes('moyenne') && (text.includes('général') || text.includes('classe'))) {
+      type = 'average';
+    } else if (!text.includes('rang') && !text.includes('total')) {
+      // Assume it's a subject if it's not any of the special columns
+      type = 'subject';
+    }
+    
+    // Calculate approximate width based on next column
+    const width = index < headerRow.length - 1 ? 
+      headerRow[index + 1].x - item.x : 
+      100; // default width for the last column
+    
+    columns.push({
+      type,
+      text: item.text,
+      x: item.x,
+      width
+    });
+  });
+  
+  return columns;
+}
+
+/**
+ * Extract data rows based on header structure
+ */
+function extractDataRows(
+  lines: Array<Array<{ text: string; x: number; y: number; page: number }>>,
+  headerRow: Array<{ text: string; x: number; y: number; page: number }>,
+  columns: Array<{ type: string; text: string; x: number; width?: number }>
+) {
+  const headerPage = headerRow[0].page;
+  const headerY = headerRow[0].y;
+  
+  // Find the header index in the lines array
+  const headerIndex = lines.findIndex(line => 
+    line[0].page === headerPage && Math.abs(line[0].y - headerY) < 5
+  );
+  
+  if (headerIndex === -1) return [];
+  
+  // Get lines after the header, filter out any that look like headers again
+  const dataLines = lines
+    .slice(headerIndex + 1)
+    .filter(line => {
+      const lineText = line.map(item => item.text.toLowerCase()).join(' ');
+      return !lineText.includes('moyenne') && !lineText.includes('total') && line.length > 1;
+    });
+  
+  // Process each data line to assign values to the right columns
+  return dataLines.map(line => {
+    const rowData = new Map<string, string>();
+    
+    // For each item in the line, find which column it belongs to
+    line.forEach(item => {
+      // Find the closest column by X position
+      const column = columns.reduce((closest, current) => {
+        const closestDist = Math.abs(closest.x - item.x);
+        const currentDist = Math.abs(current.x - item.x);
+        return currentDist < closestDist ? current : closest;
+      }, columns[0]);
+      
+      // Add to the column's data (concat in case multiple items map to same column)
+      const existingValue = rowData.get(column.text) || '';
+      rowData.set(column.text, existingValue ? `${existingValue} ${item.text}` : item.text);
+    });
+    
+    return rowData;
+  });
+}
+
+/**
+ * Create student objects from the data rows
+ */
+function createStudentObjects(
+  dataRows: Array<Map<string, string>>,
+  columns: Array<{ type: string; text: string; x: number; width?: number }>
+) {
+  const nameColumn = columns.find(col => col.type === 'name');
+  const averageColumn = columns.find(col => col.type === 'average');
+  const subjectColumns = columns.filter(col => col.type === 'subject');
+  
+  if (!nameColumn) {
+    throw new Error("Impossible de trouver la colonne du nom dans le tableau");
+  }
+  
+  return dataRows
+    .filter(row => row.get(nameColumn.text)?.trim())
+    .map(row => {
+      const name = row.get(nameColumn.text) || '';
+      
+      // Extract grades for each subject
+      const grades: { [subject: string]: number | null } = {};
+      subjectColumns.forEach(col => {
+        const gradeText = row.get(col.text);
+        
+        if (!gradeText || gradeText.includes('Abs')) {
+          grades[col.text] = null;
+        } else {
+          // Convert to number, handling French number format (comma as decimal)
+          grades[col.text] = parseFloat(gradeText.replace(',', '.')) || null;
+        }
+      });
+      
+      // Extract student average if available
+      let average: number | undefined = undefined;
+      if (averageColumn && row.get(averageColumn.text)) {
+        const avgText = row.get(averageColumn.text) || '';
+        average = parseFloat(avgText.replace(',', '.')) || undefined;
+      } else {
+        // Calculate average from available grades
+        const validGrades = Object.values(grades).filter(g => g !== null) as number[];
+        if (validGrades.length > 0) {
+          average = validGrades.reduce((sum, g) => sum + g, 0) / validGrades.length;
+        }
+      }
+      
+      return {
+        name,
+        grades,
+        average
+      };
+    });
+}
+
+/**
+ * Identify subjects from column headers
+ */
+function identifySubjects(columns: Array<{ type: string; text: string; x: number; width?: number }>) {
+  return columns
+    .filter(col => col.type === 'subject')
+    .map(col => col.text);
+}
+
+/**
+ * Extract class name from text items
+ */
+function extractClassName(textItems: Array<{ text: string; x: number; y: number; page: number }>) {
+  // Look for common class name patterns like "Classe de 3ème A", "3A", etc.
+  const classPatterns = [
+    /classe\s+de\s+(\d+[A-Za-z]*)/i,
+    /classe\s*:\s*(\d+[A-Za-z]*)/i,
+    /^(\d+[A-Za-z]*)$/
+  ];
+  
+  for (const item of textItems) {
+    for (const pattern of classPatterns) {
+      const match = item.text.match(pattern);
+      if (match) {
+        return match[1];
+      }
+    }
+  }
+  
+  return "Non identifiée";
 }
 
 /**
