@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import FileUploader from '@/components/FileUploader';
 import { savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
@@ -122,7 +121,22 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({
     
     try {
       const fileBuffer = await gradeTableFile.arrayBuffer();
-      const data = await parseGradeTable(fileBuffer);
+      
+      // Ajout d'un timeout pour éviter un blocage indéfini
+      const timeout = 30000; // 30 secondes
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Le traitement a pris trop de temps")), timeout);
+      });
+      
+      // Utiliser Promise.race pour avoir une limite de temps
+      const data = await Promise.race([
+        parseGradeTable(fileBuffer, (progress) => {
+          // Vous pouvez ajouter ici un indicateur de progression si vous le souhaitez
+          console.log(`Progression de l'analyse: ${progress}%`);
+        }),
+        timeoutPromise
+      ]);
+      
       setGradeTableData(data);
       toast.success(`Tableau analysé avec succès : ${data.students.length} élèves, ${data.subjects.length} matières`);
     } catch (error) {
@@ -130,6 +144,11 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({
       const errorMessage = error instanceof Error ? error.message : "Erreur inconnue";
       setGradeTableError(errorMessage);
       toast.error(`Erreur lors de l'analyse : ${errorMessage}`);
+      
+      // Ajouter une option pour réessayer avec un mode de compatibilité
+      toast.info("Essayez de réimporter le fichier ou utilisez l'option CSV/Excel pour ce format", {
+        duration: 6000
+      });
     } finally {
       setIsAnalyzingGradeTable(false);
     }
@@ -146,7 +165,22 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({
     
     try {
       const fileBuffer = await classBulletinFile.arrayBuffer();
-      const data = await parseClassBulletins(fileBuffer);
+      
+      // Ajout d'un timeout pour éviter un blocage indéfini
+      const timeout = 60000; // 60 secondes car l'analyse des bulletins peut être plus longue
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Le traitement a pris trop de temps")), timeout);
+      });
+      
+      // Utiliser Promise.race pour avoir une limite de temps
+      const data = await Promise.race([
+        parseClassBulletins(fileBuffer, (progress) => {
+          // Indicateur de progression
+          console.log(`Progression de l'analyse des bulletins: ${progress}%`);
+        }),
+        timeoutPromise
+      ]);
+      
       setClassBulletinData(data);
       toast.success(`Bulletins analysés avec succès : ${data.students.length} élèves`);
     } catch (error) {
@@ -154,6 +188,11 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({
       const errorMessage = error instanceof Error ? error.message : "Erreur inconnue";
       setClassBulletinError(errorMessage);
       toast.error(`Erreur lors de l'analyse : ${errorMessage}`);
+      
+      // Suggestions en cas d'erreur
+      toast.info("Le format de ce bulletin peut être difficile à analyser. Essayez un autre format ou exportez-le différemment.", {
+        duration: 6000
+      });
     } finally {
       setIsAnalyzingClassBulletin(false);
     }
@@ -170,7 +209,22 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({
     
     try {
       const fileBuffer = await studentBulletinFile.arrayBuffer();
-      const summary = await summarizeStudentBulletin(fileBuffer);
+      
+      // Ajout d'un timeout pour éviter un blocage indéfini
+      const timeout = 45000; // 45 secondes
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Le traitement a pris trop de temps")), timeout);
+      });
+      
+      // Utiliser Promise.race pour avoir une limite de temps
+      const summary = await Promise.race([
+        summarizeStudentBulletin(fileBuffer, (progress) => {
+          // Indicateur de progression
+          console.log(`Progression de l'analyse du bulletin: ${progress}%`);
+        }),
+        timeoutPromise
+      ]);
+      
       setStudentSummary(summary);
       toast.success("Appréciation générée avec succès");
     } catch (error) {
@@ -178,6 +232,13 @@ const AnalysisUploader: React.FC<AnalysisUploaderProps> = ({
       const errorMessage = error instanceof Error ? error.message : "Erreur inconnue";
       setStudentBulletinError(errorMessage);
       toast.error(`Erreur lors de l'analyse : ${errorMessage}`);
+      
+      // Suggestions en cas d'erreur
+      if (errorMessage.includes("temps")) {
+        toast.info("Le bulletin semble complexe. Essayez de le diviser en plusieurs fichiers plus petits.", {
+          duration: 6000
+        });
+      }
     } finally {
       setIsAnalyzingStudentBulletin(false);
     }
