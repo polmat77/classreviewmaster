@@ -1,8 +1,7 @@
 
 import React from 'react';
-import { Card } from '@/components/ui/card';
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ArrowDownIcon, ArrowUpIcon, MoveHorizontalIcon } from 'lucide-react';
 
 interface CategoryData {
   category: string;
@@ -20,9 +19,7 @@ interface TermAverage {
 
 interface SubjectAverage {
   name: string;
-  averages: {
-    [key: string]: number;
-  };
+  averages: Record<string, number>;
   evolution: number | null;
 }
 
@@ -33,128 +30,159 @@ interface StatisticalAnalysisProps {
 }
 
 const StatisticalAnalysis: React.FC<StatisticalAnalysisProps> = ({ 
-  categories, termAverages, subjectAverages 
+  categories, 
+  termAverages,
+  subjectAverages
 }) => {
+  const totalStudents = categories.reduce((sum, cat) => sum + cat.count, 0);
+  
   const renderEvolutionIndicator = (evolution: number | null) => {
-    if (evolution === null) return '-';
+    if (evolution === null) return null;
     
     if (evolution > 0) {
-      return (
-        <div className="flex items-center text-green-500">
-          <TrendingUp className="h-4 w-4 mr-1" />
-          <span>+{evolution}</span>
-        </div>
-      );
+      return <ArrowUpIcon className="h-4 w-4 text-green-500" />;
     } else if (evolution < 0) {
-      return (
-        <div className="flex items-center text-red-500">
-          <TrendingDown className="h-4 w-4 mr-1" />
-          <span>{evolution}</span>
-        </div>
-      );
+      return <ArrowDownIcon className="h-4 w-4 text-red-500" />;
     } else {
-      return <span className="text-blue-500">Stable</span>;
+      return <MoveHorizontalIcon className="h-4 w-4 text-gray-500" />;
     }
   };
   
-  const renderCategoryColor = (color: string, category: string) => {
-    return (
-      <div className="flex items-center">
-        <div 
-          className="w-4 h-4 mr-2 rounded" 
-          style={{ backgroundColor: color }}
-        />
-        <span>{category}</span>
-      </div>
-    );
-  };
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold mb-4">ANALYSE STATISTIQUE</h2>
-        
-        <div>
-          <h3 className="text-xl font-semibold mb-3">Répartition des élèves par catégorie</h3>
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Catégorie</TableHead>
-                  <TableHead>Plage de Moyenne</TableHead>
-                  <TableHead>Nombre d'Élèves</TableHead>
-                  <TableHead>Évolution</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categories.map((category, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{renderCategoryColor(category.color, category.category)}</TableCell>
-                    <TableCell>{category.range}</TableCell>
-                    <TableCell>{category.count}</TableCell>
-                    <TableCell>{renderEvolutionIndicator(category.evolution)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-        </div>
-        
-        <div className="mt-8">
-          <h3 className="text-xl font-semibold mb-3">Évolution de la moyenne générale</h3>
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Trimestre</TableHead>
-                  <TableHead>Moyenne Générale</TableHead>
-                  <TableHead>Évolution</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {termAverages.map((term, index) => (
-                  <TableRow key={index}>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <span className="bg-gray-100 p-1 rounded text-xs font-medium mr-2">📊</span>
-                        {term.term}
-                      </div>
-                    </TableCell>
-                    <TableCell>{term.average.toFixed(2)}</TableCell>
-                    <TableCell>{renderEvolutionIndicator(term.evolution)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-        </div>
-        
-        <div className="mt-8">
-          <h3 className="text-xl font-semibold mb-3">Évolution des moyennes par matière</h3>
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Matière</TableHead>
-                  {Object.keys(subjectAverages[0]?.averages || {}).map((term, i) => (
-                    <TableHead key={i}>Moyenne {term}</TableHead>
+        <h2 className="text-lg font-medium mb-3">Répartition des élèves par niveau</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={categories}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="category" />
+                <YAxis allowDecimals={false} />
+                <Tooltip 
+                  formatter={(value: number) => [`${value} élèves`, 'Effectif']}
+                />
+                <Bar dataKey="count">
+                  {categories.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
-                  <TableHead>Évolution</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {subjectAverages.map((subject, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{subject.name}</TableCell>
-                    {Object.values(subject.averages).map((avg, i) => (
-                      <TableCell key={i}>{avg.toFixed(2)}</TableCell>
-                    ))}
-                    <TableCell>{renderEvolutionIndicator(subject.evolution)}</TableCell>
-                  </TableRow>
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          
+          <div className="overflow-hidden bg-secondary/20 rounded-lg">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-secondary/30">
+                  <th className="px-3 py-2 text-left text-sm">Niveau</th>
+                  <th className="px-3 py-2 text-left text-sm">Notes</th>
+                  <th className="px-3 py-2 text-center text-sm">Nb élèves</th>
+                  <th className="px-3 py-2 text-center text-sm">%</th>
+                  <th className="px-3 py-2 text-center text-sm">Évolution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((category, index) => (
+                  <tr key={index} className="border-b border-secondary/20">
+                    <td className="px-3 py-2 text-sm font-medium">{category.category}</td>
+                    <td className="px-3 py-2 text-sm">{category.range}</td>
+                    <td className="px-3 py-2 text-center text-sm">{category.count}</td>
+                    <td className="px-3 py-2 text-center text-sm">
+                      {totalStudents > 0 ? ((category.count / totalStudents) * 100).toFixed(1) : "0"}%
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {renderEvolutionIndicator(category.evolution)}
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
-          </Card>
+                <tr className="bg-secondary/30 font-medium">
+                  <td className="px-3 py-2 text-sm" colSpan={2}>Total</td>
+                  <td className="px-3 py-2 text-center text-sm">{totalStudents}</td>
+                  <td className="px-3 py-2 text-center text-sm">100%</td>
+                  <td className="px-3 py-2"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+      <div>
+        <h2 className="text-lg font-medium mb-3">Évolution des moyennes par trimestre</h2>
+        <div className="overflow-hidden bg-secondary/20 rounded-lg">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-secondary/30">
+                <th className="px-4 py-2 text-left text-sm">Trimestre</th>
+                <th className="px-4 py-2 text-center text-sm">Moyenne</th>
+                <th className="px-4 py-2 text-center text-sm">Évolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {termAverages.map((term, index) => (
+                <tr key={index} className="border-b border-secondary/20">
+                  <td className="px-4 py-2 text-sm font-medium">{term.term}</td>
+                  <td className="px-4 py-2 text-center text-sm">
+                    {typeof term.average === 'number' ? term.average.toFixed(2) : term.average}
+                  </td>
+                  <td className="px-4 py-2 text-center flex justify-center items-center">
+                    {renderEvolutionIndicator(term.evolution)}
+                    {term.evolution !== null && (
+                      <span className={`ml-1 text-xs ${
+                        term.evolution > 0 ? 'text-green-600' : 
+                        term.evolution < 0 ? 'text-red-600' : 'text-gray-600'
+                      }`}>
+                        {term.evolution > 0 ? '+' : ''}{term.evolution.toFixed(2)}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div>
+        <h2 className="text-lg font-medium mb-3">Évolution par matière</h2>
+        <div className="overflow-hidden bg-secondary/20 rounded-lg">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-secondary/30">
+                <th className="px-4 py-2 text-left text-sm">Matière</th>
+                {Object.keys(subjectAverages[0]?.averages || {}).map(term => (
+                  <th key={term} className="px-4 py-2 text-center text-sm">
+                    {term}
+                  </th>
+                ))}
+                <th className="px-4 py-2 text-center text-sm">Évolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subjectAverages.map((subject, index) => (
+                <tr key={index} className="border-b border-secondary/20">
+                  <td className="px-4 py-2 text-sm font-medium">{subject.name}</td>
+                  {Object.entries(subject.averages).map(([term, avg]) => (
+                    <td key={term} className="px-4 py-2 text-center text-sm">
+                      {typeof avg === 'number' ? avg.toFixed(2) : avg}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2 text-center flex justify-center items-center">
+                    {renderEvolutionIndicator(subject.evolution)}
+                    {subject.evolution !== null && (
+                      <span className={`ml-1 text-xs ${
+                        subject.evolution > 0 ? 'text-green-600' : 
+                        subject.evolution < 0 ? 'text-red-600' : 'text-gray-600'
+                      }`}>
+                        {subject.evolution > 0 ? '+' : ''}{subject.evolution.toFixed(2)}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -5,10 +5,74 @@ import * as pdfjs from 'pdfjs-dist';
 const PDFJS_CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120";
 
 /**
+ * Initialize PDF.js worker
+ */
+export function initPdfJs(forceReinit: boolean = false): void {
+  if (forceReinit || !pdfjs.GlobalWorkerOptions.workerSrc) {
+    console.info("PDF.js worker initialized from CDN");
+    pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN_URL}/pdf.worker.min.js`;
+  }
+}
+
+/**
  * Validate if file is a PDF
  */
-export function validatePdfFile(file: File): boolean {
-  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+export function validatePdfFile(file: File): Promise<{ isValid: boolean; reason: string }> {
+  return new Promise(async (resolve) => {
+    try {
+      // Initialize PDF.js if not already done
+      initPdfJs();
+      
+      // Basic file type check
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        return resolve({ isValid: false, reason: "Le fichier n'est pas un PDF" });
+      }
+      
+      // Read first few bytes to verify PDF signature
+      const fileHeader = await readFileHeader(file);
+      if (!fileHeader.startsWith('%PDF')) {
+        return resolve({ isValid: false, reason: "Signature PDF invalide" });
+      }
+      
+      // Try to load the PDF with PDF.js for deeper validation
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+      
+      // Add timeout for slow PDFs
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout reading PDF")), 10000);
+      });
+      
+      try {
+        await Promise.race([loadingTask.promise, timeoutPromise]);
+        return resolve({ isValid: true, reason: "" });
+      } catch (error) {
+        console.warn(`PDF validation warning for ${file.name}:`, error);
+        // Still accept the file but with a warning
+        return resolve({ 
+          isValid: true, 
+          reason: "Le PDF pourrait être corrompu mais sera utilisé quand même" 
+        });
+      }
+    } catch (error) {
+      console.error(`Error validating ${file.name}:`, error);
+      // Accept the file with a warning
+      return resolve({ 
+        isValid: true, 
+        reason: "Validation impossible mais le fichier sera utilisé quand même" 
+      });
+    }
+  });
+}
+
+/**
+ * Read the first few bytes of a file
+ */
+async function readFileHeader(file: File): Promise<string> {
+  const slice = file.slice(0, 5);
+  const arrayBuffer = await slice.arrayBuffer();
+  const decoder = new TextDecoder('utf-8');
+  return decoder.decode(arrayBuffer);
 }
 
 /**
@@ -17,9 +81,7 @@ export function validatePdfFile(file: File): boolean {
 export async function extractTextFromPDF(file: File, onProgress?: (progress: number) => void): Promise<string> {
   try {
     // Ensure PDF.js worker is set
-    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN_URL}/pdf.worker.min.js`;
-    }
+    initPdfJs();
     
     // Convert File to ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
@@ -83,9 +145,7 @@ export async function extractTextFromPDF(file: File, onProgress?: (progress: num
 export async function extractStructuredDataFromPDF(file: File): Promise<any> {
   try {
     // Ensure PDF.js worker is set
-    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN_URL}/pdf.worker.min.js`;
-    }
+    initPdfJs();
     
     // Convert File to ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
@@ -245,7 +305,7 @@ function processTable(tableRows: any[], pageWidth: number, pageHeight: number): 
   const sortedXPositions = Array.from(xPositions).sort((a, b) => a - b);
   
   // Create a structured table
-  const table = {
+  const table: { rows: string[][]; header: string[]; data: string[][] } = {
     rows: tableRows.map(row => {
       const cells = sortedXPositions.map(x => {
         const itemsInCell = row.filter((item: any) => 
@@ -256,7 +316,9 @@ function processTable(tableRows: any[], pageWidth: number, pageHeight: number): 
       });
       
       return cells;
-    })
+    }),
+    header: [],
+    data: []
   };
   
   // Attempt to identify the header row
