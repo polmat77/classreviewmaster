@@ -1,3 +1,4 @@
+
 import * as pdfjs from 'pdfjs-dist';
 import { toast } from 'sonner';
 import { OpenAIService } from './openai-service';
@@ -525,136 +526,177 @@ export async function parseClassBulletins(
         }
       }
       
-      const fullText = fullTextArray.join('\n');
-      
-      // Vérifier si nous avons extrait du texte
-      if (!fullText || fullText.trim().length < 100) {
-        throw new Error("Le PDF semble vide ou ne contient pas de texte extractible");
-      }
-      
-      // Update progress: text extraction complete
-      if (onProgress) {
-        onProgress(50);
-      }
-      
-      // Split into individual bulletin texts
-      const bulletinTexts = splitBulletins(fullText);
-      console.log(`Identified ${bulletinTexts.length} individual student bulletins`);
-      
-      // Vérifier si nous avons trouvé des bulletins
-      if (bulletinTexts.length === 0) {
-        throw new Error("Aucun bulletin n'a été détecté dans le PDF. Vérifiez le format du document.");
-      }
-      
-      // Update progress: split complete
-      if (onProgress) {
-        onProgress(60);
-      }
-      
-      const students: StudentBulletin[] = [];
-      const allRemarks: string[] = [];
-      
-      // Process each bulletin with progress updates
-      for (let i = 0; i < bulletinTexts.length; i++) {
-        const bulletinText = bulletinTexts[i];
-        
-        // Process individual bulletin (extract student name, class, etc.)
-        const nameMatch = bulletinText.match(/(?:Nom|Élève)\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i) || 
-                        bulletinText.match(/Bulletin[^:]*?:\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i);
-        
-        const classMatch = bulletinText.match(/Classe\s*:?\s*([\wÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$)/i);
-        
-        const studentName = nameMatch ? nameMatch[1].trim() : "Élève Inconnu";
-        const className = classMatch ? classMatch[1].trim() : "Classe Inconnue";
-
-        // Extract subjects and remarks
-        const subjects: SubjectFeedback[] = [];
-        const lines = bulletinText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        let currentSubject: SubjectFeedback | null = null;
-        
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          
-          // If line looks like a subject title (all caps or major subject name)
-          if (/^[A-ZÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$/.test(line) || 
-              /^(?:FRANÇAIS|MATHÉMATIQUES|HISTOIRE|GÉOGRAPHIE|ANGLAIS|PHYSIQUE|CHIMIE|SVT|EPS)$/i.test(line)) {
-            
-            // Save the previous subject feedback if any
-            if (currentSubject) {
-              subjects.push(currentSubject);
-            }
-            
-            // Start a new subject feedback
-            currentSubject = { subject: line, average: null, remark: "" };
-            // Next line(s) may contain average and remarks
-          } else if (currentSubject) {
-            // Check if the line contains a numeric average
-            const avgMatch = line.match(/(\d+[,.]\d+)\/20/);
-            if (avgMatch && currentSubject.average === null) {
-              // Parse the first number as the student's average for that subject
-              currentSubject.average = parseFloat(avgMatch[1].replace(',', '.'));
-              // Remove the number from the line when taking it as comment
-              const commentPart = line.replace(/(\d+[,.]\d+)\/20/, "").trim();
-              if (commentPart) {
-                currentSubject.remark += commentPart;
-              }
-            } else if (line.includes("Professeur") || line.includes("Enseignant")) {
-              // Extract teacher name if present
-              const teacherMatch = line.match(/(?:Professeur|Enseignant)\s*:?\s*(.+?)(?=\s*$)/i);
-              if (teacherMatch) {
-                currentSubject.teacher = teacherMatch[1].trim();
-              }
-            } else {
-              // Append the line to the remark
-              if (line) {
-                currentSubject.remark += (currentSubject.remark ? " " : "") + line;
-              }
-            }
-          }
-        }
-        
-        // Push the last subject if it exists
-        if (currentSubject) {
-          subjects.push(currentSubject);
-        }
-
-        // Collect all non-empty remarks for class summary
-        subjects.forEach(sub => {
-          if (sub.remark && sub.remark.length > 10) { // Only add substantial remarks
-            allRemarks.push(`${sub.subject}: ${sub.remark}`);
-          }
-        });
-
-        students.push({ name: studentName, class: className, subjects });
-        
-        // Update progress for each processed bulletin
-        if (onProgress) {
-          const bulletinProgress = Math.floor(60 + ((i + 1) / bulletinTexts.length) * 35);
-          onProgress(Math.min(bulletinProgress, 95));
-        }
-      }
-
-      // Vérifier si nous avons extrait des données d'élèves
-      if (students.length === 0) {
-        throw new Error("Aucune donnée d'élève n'a pu être extraite du PDF");
-      }
-
-      // Generate class summary with NLP if we have enough data
-      let classSummary = "";
-      
-      if (allRemarks.length > 0) {
-        console.log(`Generating class summary based on ${allRemarks.length} subject remarks`);
-        
-        if (onProgress) {
-          onProgress(95); // Summary generation in progress
-        }
-        
+      // Extract text with position for better structure recognition
+      const structuredPages = [];
+      for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
         try {
-          // Limiter le nombre de remarques pour la requête à OpenAI
-          const maxRemarks = 20; // Réduire de 30 à 20
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const viewport = page.getViewport({ scale: 1.0 });
           
-          // Prepare prompt for OpenAI
-          const prompt = `Vous êtes un professeur principal qui doit rédiger une synthèse pour le conseil de classe.
+          // Convert textItems to structured format with positions
+          const items = textContent.items.map((item: any) => {
+            if (item.str && item.str.trim()) {
+              const tx = item.transform[4];
+              const ty = viewport.height - item.transform[5]; // Y is inverted
+              
+              return {
+                text: item.str.trim(),
+                x: tx,
+                y: ty,
+                fontSize: item.height,
+                fontName: item.fontName
+              };
+            }
+            return null;
+          }).filter(Boolean);
+          
+          structuredPages.push({ pageNum, items });
+        } catch (error) {
+          console.error(`Error processing structured text from page ${pageNum}:`, error);
+        }
+      }
+      
+      // Detect if this is a class bulletin (format similaire à l'image uploadée)
+      const isClassBulletinFormat = detectClassBulletinFormat(structuredPages);
+      
+      let result: ClassBulletinResult;
+      
+      if (isClassBulletinFormat) {
+        console.log("Bulletin de classe détecté - format spécifique");
+        result = await parseClassBulletinFormat(structuredPages, onProgress);
+      } else {
+        // Process as before for other bulletin formats
+        const fullText = fullTextArray.join('\n');
+        
+        // Vérifier si nous avons extrait du texte
+        if (!fullText || fullText.trim().length < 100) {
+          throw new Error("Le PDF semble vide ou ne contient pas de texte extractible");
+        }
+        
+        // Update progress: text extraction complete
+        if (onProgress) {
+          onProgress(50);
+        }
+        
+        // Split into individual bulletin texts
+        const bulletinTexts = splitBulletins(fullText);
+        console.log(`Identified ${bulletinTexts.length} individual student bulletins`);
+        
+        // Vérifier si nous avons trouvé des bulletins
+        if (bulletinTexts.length === 0) {
+          throw new Error("Aucun bulletin n'a été détecté dans le PDF. Vérifiez le format du document.");
+        }
+        
+        // Update progress: split complete
+        if (onProgress) {
+          onProgress(60);
+        }
+        
+        const students: StudentBulletin[] = [];
+        const allRemarks: string[] = [];
+        
+        // Process each bulletin with progress updates
+        for (let i = 0; i < bulletinTexts.length; i++) {
+          const bulletinText = bulletinTexts[i];
+          
+          // Process individual bulletin (extract student name, class, etc.)
+          const nameMatch = bulletinText.match(/(?:Nom|Élève)\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i) || 
+                          bulletinText.match(/Bulletin[^:]*?:\s*([A-Za-zÀ-ÖØ-öø-ÿ\s\-]+)(?=\s|\n|$)/i);
+          
+          const classMatch = bulletinText.match(/Classe\s*:?\s*([\wÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$)/i);
+          
+          const studentName = nameMatch ? nameMatch[1].trim() : "Élève Inconnu";
+          const className = classMatch ? classMatch[1].trim() : "Classe Inconnue";
+
+          // Extract subjects and remarks
+          const subjects: SubjectFeedback[] = [];
+          const lines = bulletinText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          let currentSubject: SubjectFeedback | null = null;
+          
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // If line looks like a subject title (all caps or major subject name)
+            if (/^[A-ZÀ-ÖØ-Ü]{3,}(?:[\s\-][A-ZÀ-ÖØ-Ü]{2,})*$/.test(line) || 
+                /^(?:FRANÇAIS|MATHÉMATIQUES|HISTOIRE|GÉOGRAPHIE|ANGLAIS|PHYSIQUE|CHIMIE|SVT|EPS)$/i.test(line)) {
+              
+              // Save the previous subject feedback if any
+              if (currentSubject) {
+                subjects.push(currentSubject);
+              }
+              
+              // Start a new subject feedback
+              currentSubject = { subject: line, average: null, remark: "" };
+              // Next line(s) may contain average and remarks
+            } else if (currentSubject) {
+              // Check if the line contains a numeric average
+              const avgMatch = line.match(/(\d+[,.]\d+)\/20/);
+              if (avgMatch && currentSubject.average === null) {
+                // Parse the first number as the student's average for that subject
+                currentSubject.average = parseFloat(avgMatch[1].replace(',', '.'));
+                // Remove the number from the line when taking it as comment
+                const commentPart = line.replace(/(\d+[,.]\d+)\/20/, "").trim();
+                if (commentPart) {
+                  currentSubject.remark += commentPart;
+                }
+              } else if (line.includes("Professeur") || line.includes("Enseignant")) {
+                // Extract teacher name if present
+                const teacherMatch = line.match(/(?:Professeur|Enseignant)\s*:?\s*(.+?)(?=\s*$)/i);
+                if (teacherMatch) {
+                  currentSubject.teacher = teacherMatch[1].trim();
+                }
+              } else {
+                // Append the line to the remark
+                if (line) {
+                  currentSubject.remark += (currentSubject.remark ? " " : "") + line;
+                }
+              }
+            }
+          }
+          
+          // Push the last subject if it exists
+          if (currentSubject) {
+            subjects.push(currentSubject);
+          }
+
+          // Collect all non-empty remarks for class summary
+          subjects.forEach(sub => {
+            if (sub.remark && sub.remark.length > 10) { // Only add substantial remarks
+              allRemarks.push(`${sub.subject}: ${sub.remark}`);
+            }
+          });
+
+          students.push({ name: studentName, class: className, subjects });
+          
+          // Update progress for each processed bulletin
+          if (onProgress) {
+            const bulletinProgress = Math.floor(60 + ((i + 1) / bulletinTexts.length) * 35);
+            onProgress(Math.min(bulletinProgress, 95));
+          }
+        }
+
+        // Vérifier si nous avons extrait des données d'élèves
+        if (students.length === 0) {
+          throw new Error("Aucune donnée d'élève n'a pu être extraite du PDF");
+        }
+
+        // Generate class summary with NLP if we have enough data
+        let classSummary = "";
+        
+        if (allRemarks.length > 0) {
+          console.log(`Generating class summary based on ${allRemarks.length} subject remarks`);
+          
+          if (onProgress) {
+            onProgress(95); // Summary generation in progress
+          }
+          
+          try {
+            // Limiter le nombre de remarques pour la requête à OpenAI
+            const maxRemarks = 20; // Réduire de 30 à 20
+            
+            // Prepare prompt for OpenAI
+            const prompt = `Vous êtes un professeur principal qui doit rédiger une synthèse pour le conseil de classe.
 Voici des extraits d'appréciations des professeurs pour l'ensemble des élèves:
 
 ${allRemarks.slice(0, maxRemarks).map(r => `- ${r}`).join("\n")}
@@ -667,13 +709,16 @@ Rédigez un paragraphe de synthèse pour la classe entière (100-150 mots) qui:
 
 Synthèse pour la classe:`;
 
-          classSummary = await OpenAIService.generateText(prompt);
-        } catch (error) {
-          console.error("Error generating class summary:", error);
-          classSummary = "Impossible de générer une synthèse automatique. Veuillez consulter les appréciations individuelles.";
+            classSummary = await OpenAIService.generateText(prompt);
+          } catch (error) {
+            console.error("Error generating class summary:", error);
+            classSummary = "Impossible de générer une synthèse automatique. Veuillez consulter les appréciations individuelles.";
+          }
+        } else {
+          classSummary = "Pas suffisamment de données pour générer une synthèse de classe.";
         }
-      } else {
-        classSummary = "Pas suffisamment de données pour générer une synthèse de classe.";
+        
+        result = { students, classSummary };
       }
       
       console.timeEnd("Class Bulletins Parsing");
@@ -682,7 +727,7 @@ Synthèse pour la classe:`;
         onProgress(100); // Processing complete
       }
       
-      return { students, classSummary };
+      return result;
     };
     
     // Exécuter avec le timeout
@@ -691,6 +736,370 @@ Synthèse pour la classe:`;
     console.error('Error parsing class bulletins:', error);
     throw new Error(`Erreur lors de l'analyse des bulletins: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
   }
+}
+
+/**
+ * Détecte si le format du document correspond à un bulletin de classe
+ */
+function detectClassBulletinFormat(structuredPages: any[]): boolean {
+  // Analyse la première page pour détecter les caractéristiques d'un bulletin de classe
+  if (structuredPages.length === 0) return false;
+  
+  const firstPage = structuredPages[0];
+  const items = firstPage.items;
+  
+  // Chercher les indicateurs typiques d'un bulletin de classe
+  const bulletinHeaderFound = items.some((item: any) => 
+    /bulletin du \d+(er|ème|e)? trimestre/i.test(item.text)
+  );
+  
+  const tableStyleDetected = detectTableStructure(items);
+  const matiereFound = items.some((item: any) => /matière/i.test(item.text));
+  const appreciationFound = items.some((item: any) => /appréciation/i.test(item.text));
+  
+  // Si on trouve au moins deux indicateurs, c'est probablement un bulletin de classe
+  const indicators = [bulletinHeaderFound, tableStyleDetected, matiereFound, appreciationFound];
+  const scoreThreshold = 2;
+  const score = indicators.filter(Boolean).length;
+  
+  console.log(`Format detection - Score: ${score}/${scoreThreshold} (bulletin: ${bulletinHeaderFound}, table: ${tableStyleDetected}, matière: ${matiereFound}, appréciations: ${appreciationFound})`);
+  
+  return score >= scoreThreshold;
+}
+
+/**
+ * Détecte si le document contient une structure de tableau
+ */
+function detectTableStructure(items: any[]): boolean {
+  // Grouper par ligne (y-coordinate)
+  const yTolerance = 5;
+  const rowGroups = new Map<number, any[]>();
+  
+  items.forEach(item => {
+    const roundedY = Math.round(item.y / yTolerance) * yTolerance;
+    if (!rowGroups.has(roundedY)) {
+      rowGroups.set(roundedY, []);
+    }
+    rowGroups.get(roundedY)!.push(item);
+  });
+  
+  // Vérifier si les éléments sont alignés en colonnes
+  if (rowGroups.size < 3) return false; // Pas assez de lignes
+  
+  // Compter combien de lignes ont plusieurs éléments alignés horizontalement
+  let alignedRows = 0;
+  for (const [_, row] of rowGroups) {
+    if (row.length >= 3) { // Au moins 3 éléments par ligne
+      alignedRows++;
+    }
+  }
+  
+  // S'il y a au moins 3 lignes avec des éléments alignés, c'est probablement un tableau
+  return alignedRows >= 3;
+}
+
+/**
+ * Parse un bulletin de classe au format spécifique (comme celui de l'image)
+ */
+async function parseClassBulletinFormat(structuredPages: any[], onProgress?: (progress: number) => void): Promise<ClassBulletinResult> {
+  if (onProgress) {
+    onProgress(60); // Start parsing the specialized format
+  }
+  
+  // Extraire les informations de l'en-tête
+  const headerInfo = extractBulletinHeader(structuredPages);
+  console.log("Bulletin header:", headerInfo);
+  
+  // Extraire la structure du tableau des matières et appréciations
+  const subjectsData = extractSubjectsTable(structuredPages);
+  console.log(`Extracted ${subjectsData.length} subjects from table`);
+  
+  // Créer un objet StudentBulletin avec les données extraites
+  const student: StudentBulletin = {
+    name: headerInfo.studentName || "Classe",
+    class: headerInfo.className || headerInfo.schoolName || "Non identifiée",
+    subjects: subjectsData.map(subject => ({
+      subject: subject.name,
+      average: subject.average,
+      teacher: subject.teacher,
+      remark: subject.comment
+    }))
+  };
+  
+  // Générer une synthèse de classe
+  let classSummary = headerInfo.classAppreciation || "";
+  
+  if (!classSummary && subjectsData.length > 0) {
+    if (onProgress) {
+      onProgress(80);
+    }
+    
+    try {
+      // Générer une synthèse à partir des appréciations par matière
+      const remarks = subjectsData
+        .filter(s => s.comment && s.comment.trim().length > 0)
+        .map(s => `${s.name} (${s.average || 'N/A'}/20): ${s.comment}`);
+      
+      if (remarks.length > 0) {
+        const prompt = `Vous êtes un professeur principal qui doit rédiger une synthèse pour le conseil de classe.
+Voici des appréciations par matière pour la classe ${headerInfo.className || ""}:
+
+${remarks.map(r => `- ${r}`).join("\n")}
+
+Rédigez un paragraphe de synthèse pour la classe entière (100-150 mots) qui:
+1. Identifie les points forts généraux de la classe
+2. Souligne les difficultés communes rencontrées
+3. Propose des axes d'amélioration
+4. Maintient un ton professionnel et constructif
+
+Synthèse pour la classe:`;
+
+        classSummary = await OpenAIService.generateText(prompt);
+      }
+    } catch (error) {
+      console.error("Error generating class summary:", error);
+      classSummary = "Impossible de générer une synthèse automatique.";
+    }
+  }
+  
+  if (onProgress) {
+    onProgress(95);
+  }
+  
+  // Retourner les résultats
+  return {
+    students: [student],
+    classSummary
+  };
+}
+
+/**
+ * Extrait les informations de l'en-tête du bulletin
+ */
+function extractBulletinHeader(structuredPages: any[]): any {
+  const firstPage = structuredPages[0];
+  const items = firstPage.items;
+  
+  const headerInfo: any = {
+    schoolName: "",
+    className: "",
+    studentName: "",
+    term: "",
+    year: "",
+    classAppreciation: ""
+  };
+  
+  // Rechercher le nom de l'établissement (souvent en haut de page, gros caractères)
+  const schoolNameItems = items
+    .filter((item: any) => item.y < 100 && item.fontSize > 10) // En haut de page
+    .sort((a: any, b: any) => b.fontSize - a.fontSize); // Trié par taille de police
+  
+  if (schoolNameItems.length > 0) {
+    headerInfo.schoolName = schoolNameItems[0].text;
+  }
+  
+  // Rechercher le trimestre
+  const termRegex = /bulletin du (\d+(?:er|ème|e)? trimestre)/i;
+  for (const item of items) {
+    const match = item.text.match(termRegex);
+    if (match) {
+      headerInfo.term = match[1];
+      break;
+    }
+  }
+  
+  // Rechercher l'année scolaire
+  const yearRegex = /année(?:\s+scolaire)?\s+:?\s*(20\d{2}[\/\-]20\d{2})/i;
+  for (const item of items) {
+    const match = item.text.match(yearRegex);
+    if (match) {
+      headerInfo.year = match[1];
+      break;
+    }
+  }
+  
+  // Rechercher la classe
+  const classRegex = /classe\s*:?\s*(.+?)(?=\s|\n|$)/i;
+  for (const item of items) {
+    const match = item.text.match(classRegex);
+    if (match) {
+      headerInfo.className = match[1].trim();
+      break;
+    }
+  }
+  
+  // Rechercher le titre "appréciation générale"
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (/appréciation[s]?\s+générale[s]?/i.test(item.text)) {
+      // Les textes suivants sont probablement l'appréciation générale
+      let appText = "";
+      let j = i + 1;
+      while (j < items.length && items[j].y < item.y + 100) {
+        // Collecter le texte jusqu'à la prochaine section ou un certain nombre de lignes
+        if (!/matière|moyenne|professeur/i.test(items[j].text)) {
+          appText += " " + items[j].text;
+        } else {
+          break;
+        }
+        j++;
+      }
+      headerInfo.classAppreciation = appText.trim();
+      break;
+    }
+  }
+  
+  return headerInfo;
+}
+
+/**
+ * Extrait la table des matières et leurs appréciations
+ */
+function extractSubjectsTable(structuredPages: any[]): any[] {
+  const subjects: any[] = [];
+  const firstPage = structuredPages[0];
+  
+  // Regrouper les éléments par ligne (y-coordinate)
+  const rows = groupItemsByRows(firstPage.items);
+  
+  // Identifier les lignes qui contiennent les matières
+  let currentSubject: any = null;
+  
+  for (const row of rows) {
+    // Détecter si c'est une ligne d'en-tête de matière
+    // Les matières sont souvent en gras ou en majuscules, parfois le texte est aligné à gauche
+    const potentialSubjectNameItem = row.find((item: any) => 
+      (item.fontName && item.fontName.includes('Bold')) ||
+      (item.text === item.text.toUpperCase() && item.text.length > 3) ||
+      item.x < 100 // Aligné à gauche
+    );
+    
+    if (potentialSubjectNameItem) {
+      // Vérifier si c'est une matière reconnue
+      const subjectName = potentialSubjectNameItem.text;
+      
+      if (isSubjectName(subjectName)) {
+        // Sauvegarder le sujet précédent si existe
+        if (currentSubject) {
+          subjects.push(currentSubject);
+        }
+        
+        // Initialiser un nouveau sujet
+        currentSubject = {
+          name: subjectName,
+          average: null,
+          teacher: "",
+          comment: ""
+        };
+        
+        // Rechercher la moyenne sur la même ligne
+        const averageItem = row.find((item: any) => {
+          const text = item.text;
+          return /^\d+([.,]\d+)?\/20$/.test(text.trim()) || 
+                (/^\d+([.,]\d+)?$/.test(text.trim()) && 
+                 parseFloat(text.replace(',', '.')) <= 20);
+        });
+        
+        if (averageItem) {
+          const avgText = averageItem.text.trim();
+          const numericPart = avgText.split('/')[0].trim();
+          currentSubject.average = parseFloat(numericPart.replace(',', '.'));
+        }
+        
+        // Rechercher le nom du professeur
+        const teacherItem = row.find((item: any) => {
+          const text = item.text.toLowerCase();
+          return text.includes("m.") || text.includes("mme") || 
+                 text.includes("mr") || text.includes("prof");
+        });
+        
+        if (teacherItem) {
+          currentSubject.teacher = teacherItem.text.trim();
+        }
+      } else if (currentSubject) {
+        // Si ce n'est pas une nouvelle matière, c'est probablement une partie de l'appréciation
+        currentSubject.comment += " " + row.map((item: any) => item.text).join(" ");
+      }
+    } else if (currentSubject) {
+      // Si ça n'a pas l'air d'être une nouvelle matière, ajouter à l'appréciation actuelle
+      const rowText = row.map((item: any) => item.text).join(" ");
+      if (rowText.trim() && !rowText.match(/^\d+([.,]\d+)?\/20$/)) {
+        currentSubject.comment += " " + rowText;
+      }
+    }
+  }
+  
+  // Ajouter le dernier sujet s'il existe
+  if (currentSubject) {
+    subjects.push(currentSubject);
+  }
+  
+  // Nettoyer les commentaires
+  subjects.forEach(subject => {
+    if (subject.comment) {
+      subject.comment = subject.comment.trim()
+        .replace(/\s+/g, ' ')  // Remplacer les espaces multiples
+        .replace(/^[\s\-:]+/, '')  // Enlever les caractères de début
+        .trim();
+    }
+  });
+  
+  return subjects;
+}
+
+/**
+ * Regroupe les éléments textuels par lignes
+ */
+function groupItemsByRows(items: any[]): any[][] {
+  const yTolerance = 5;
+  const rowGroups = new Map<number, any[]>();
+  
+  items.forEach(item => {
+    const roundedY = Math.round(item.y / yTolerance) * yTolerance;
+    if (!rowGroups.has(roundedY)) {
+      rowGroups.set(roundedY, []);
+    }
+    rowGroups.get(roundedY)!.push(item);
+  });
+  
+  // Trier les lignes par position Y et les éléments par position X
+  return Array.from(rowGroups.entries())
+    .sort(([y1], [y2]) => y1 - y2)
+    .map(([_, row]) => row.sort((a, b) => a.x - b.x));
+}
+
+/**
+ * Vérifie si le texte correspond à un nom de matière
+ */
+function isSubjectName(text: string): boolean {
+  const normalizedText = text.trim().toUpperCase();
+  
+  // Liste des matières communes
+  const commonSubjects = [
+    'FRANÇAIS', 'MATHÉMATIQUES', 'MATHS', 'HISTOIRE', 'GÉOGRAPHIE', 
+    'ANGLAIS', 'ALLEMAND', 'ESPAGNOL', 'ITALIEN', 'PHYSIQUE', 'CHIMIE',
+    'SVT', 'SCIENCES', 'EPS', 'SPORT', 'TECHNOLOGIE', 'MUSIQUE',
+    'ARTS', 'PHILOSOPHIE', 'ÉCONOMIE', 'INFORMATIQUE', 'LATIN',
+    'HISTOIRE-GÉOGRAPHIE', 'PHYSIQUE-CHIMIE', 'EDUCATION MUSICALE',
+    'ARTS PLASTIQUES', 'POLE SCIENCES', 'POLE LITTERAIRE'
+  ];
+  
+  // Vérifier si le texte correspond à une matière commune
+  if (commonSubjects.some(subject => normalizedText.includes(subject))) {
+    return true;
+  }
+  
+  // Vérifier si le texte a un format de matière (tout en majuscules ou commence par une majuscule)
+  if (normalizedText === text && text.length > 3) {
+    return true; // Tout en majuscules
+  }
+  
+  // Considérer comme matière si c'est court et commence par une majuscule
+  if (text.length < 20 && /^[A-Z]/.test(text)) {
+    return true;
+  }
+  
+  return false;
 }
 
 /**

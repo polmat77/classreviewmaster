@@ -21,6 +21,8 @@ interface SubjectAverage {
   name: string;
   averages: Record<string, number>;
   evolution: number | null;
+  teacher?: string; // Ajout du nom de l'enseignant
+  comments?: string; // Ajout des appréciations
 }
 
 interface StatisticalAnalysisProps {
@@ -145,24 +147,27 @@ const StatisticalAnalysis: React.FC<StatisticalAnalysisProps> = ({
       </div>
       
       <div>
-        <h2 className="text-lg font-medium mb-3">Évolution par matière</h2>
+        <h2 className="text-lg font-medium mb-3">Matières et appréciations</h2>
         <div className="overflow-hidden bg-secondary/20 rounded-lg">
           <table className="w-full">
             <thead>
               <tr className="bg-secondary/30">
                 <th className="px-4 py-2 text-left text-sm">Matière</th>
+                <th className="px-4 py-2 text-left text-sm">Professeur</th>
                 {Object.keys(subjectAverages[0]?.averages || {}).map(term => (
                   <th key={term} className="px-4 py-2 text-center text-sm">
                     {term}
                   </th>
                 ))}
                 <th className="px-4 py-2 text-center text-sm">Évolution</th>
+                <th className="px-4 py-2 text-left text-sm">Appréciation</th>
               </tr>
             </thead>
             <tbody>
               {subjectAverages.map((subject, index) => (
                 <tr key={index} className="border-b border-secondary/20">
                   <td className="px-4 py-2 text-sm font-medium">{subject.name}</td>
+                  <td className="px-4 py-2 text-sm">{subject.teacher || '-'}</td>
                   {Object.entries(subject.averages).map(([term, avg]) => (
                     <td key={term} className="px-4 py-2 text-center text-sm">
                       {typeof avg === 'number' ? avg.toFixed(2) : avg}
@@ -178,6 +183,9 @@ const StatisticalAnalysis: React.FC<StatisticalAnalysisProps> = ({
                         {subject.evolution > 0 ? '+' : ''}{subject.evolution.toFixed(2)}
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-2 text-sm max-w-xs truncate hover:text-clip hover:whitespace-normal">
+                    {subject.comments || '-'}
                   </td>
                 </tr>
               ))}

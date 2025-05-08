@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useNavigate } from 'react-router-dom';
@@ -10,6 +11,7 @@ import { toast } from 'sonner';
 import { extractTextFromPDF } from '@/utils/pdf-service';
 import { parseTabularFile } from '@/utils/bulletin-mapping';
 import { processGradeFiles } from '@/utils/data-processing';
+import { parseClassBulletins } from '@/utils/pdf-processing';
 import { FileSpreadsheet, FileText, ChevronRight, BarChart2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -26,6 +28,7 @@ const ImportationBulletins: React.FC = () => {
   const [mappedData, setMappedData] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [showMapping, setShowMapping] = useState<boolean>(false);
+  const [processingDirect, setProcessingDirect] = useState<boolean>(false);
   
   const [extractionStep, setExtractionStep] = useState(0);
   const extractionSteps = [
@@ -53,6 +56,50 @@ const ImportationBulletins: React.FC = () => {
     setMappedData(null);
     setShowMapping(false);
     
+    // Essayer d'abord de traiter directement comme un bulletin de classe
+    try {
+      setProcessingDirect(true);
+      setProcessingStep(1);
+      
+      const fileBuffer = await file.arrayBuffer();
+      const result = await parseClassBulletins(fileBuffer, (progress) => {
+        setProcessingStep(Math.min(4, Math.floor(progress / 25) + 1));
+      });
+      
+      if (result && result.students && result.students.length > 0) {
+        // Si on a réussi à extraire des données de bulletin de classe directement
+        const processedData = {
+          className: result.students[0].class,
+          students: result.students.map(student => ({
+            name: student.name,
+            subjects: student.subjects.map(subject => ({
+              name: subject.subject,
+              average: subject.average,
+              comment: subject.remark,
+              teacher: subject.teacher
+            }))
+          })),
+          classSummary: result.classSummary
+        };
+        
+        setProcessingStep(5);
+        
+        localStorage.setItem('analysisData', JSON.stringify(processedData));
+        toast.success('Analyse du bulletin terminée avec succès');
+        
+        navigate('/appreciation-generale', { 
+          state: { analysisData: processedData }
+        });
+        return;
+      }
+    } catch (error) {
+      console.log("Traitement direct échoué, on passe à l'extraction classique", error);
+    } finally {
+      setProcessingDirect(false);
+      setProcessingStep(0);
+    }
+    
+    // Si le traitement direct a échoué, passer à la méthode normale d'extraction
     await extractPdfText(file);
   };
   
@@ -198,7 +245,7 @@ const ImportationBulletins: React.FC = () => {
             <Card className="p-6">
               <h2 className="text-xl font-medium mb-4">Importation de bulletins PDF</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Importez un fichier PDF contenant un ou plusieurs bulletins scolaires. Le système extraira le texte pour vous permettre de configurer le mapping des données.
+                Importez un fichier PDF contenant un ou plusieurs bulletins scolaires. Le système analysera automatiquement le format du document.
               </p>
               
               <FileUploader
@@ -209,7 +256,19 @@ const ImportationBulletins: React.FC = () => {
                 description="Glissez-déposez votre fichier PDF ou cliquez pour parcourir"
               />
               
-              {isExtracting && extractionStep > 0 && (
+              {processingDirect && processingStep > 0 && (
+                <div className="mt-4">
+                  <ProgressIndicator 
+                    currentStep={processingStep} 
+                    totalSteps={processingSteps.length - 1}
+                    steps={processingSteps}
+                    isLoading={processingStep < processingSteps.length - 1}
+                  />
+                  <p className="text-sm text-muted-foreground mt-2">Analyse automatique en cours...</p>
+                </div>
+              )}
+              
+              {isExtracting && extractionStep > 0 && !processingDirect && (
                 <div className="mt-4">
                   <ProgressIndicator 
                     currentStep={extractionStep} 
@@ -220,7 +279,7 @@ const ImportationBulletins: React.FC = () => {
                 </div>
               )}
               
-              {showMapping && pdfText && (
+              {showMapping && pdfText && !processingDirect && (
                 <div className="mt-6">
                   <BulletinMappingInterfaceV2
                     extractedText={pdfText}
