@@ -49,7 +49,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   const [appreciation, setAppreciation] = useState('');
   const [copied, setCopied] = useState(false);
   const [classReportFiles, setClassReportFiles] = useState<File[]>([]);
-  const [extractedText, setExtractedText] = useState('');
+  const [extractedText, setExtractedText] = useState<string>('');
   const [extractionProgress, setExtractionProgress] = useState(0);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
@@ -132,14 +132,16 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
               const pdfText = await extractTextFromPDF(file, progress => {
                 setExtractionProgress(progress);
               });
-              setExtractedText(pdfText || '');
-              
-              // Auto-détection de certains éléments basée sur le texte extrait
-              const classMatch = (pdfText || '').match(/Classe\s*:?\s*(\d+)/i);
-              const trimestreMatch = (pdfText || '').match(/Trimestre\s*(\d)/i);
-              
-              toast.info(`Texte extrait avec succès (${(pdfText || '').length} caractères)`);
-              toast.info(`Cliquez sur "Générer l'appréciation" pour continuer.`);
+              if (pdfText) {
+                setExtractedText(pdfText);
+                
+                // Auto-détection de certains éléments basée sur le texte extrait
+                const classMatch = pdfText.match(/Classe\s*:?\s*(\d+)/i);
+                const trimestreMatch = pdfText.match(/Trimestre\s*(\d)/i);
+                
+                toast.info(`Texte extrait avec succès (${pdfText.length} caractères)`);
+                toast.info(`Cliquez sur "Générer l'appréciation" pour continuer.`);
+              }
             } catch (textError) {
               console.error("Erreur également avec l'extraction de texte:", textError);
               toast.error(`Impossible d'extraire le contenu du fichier ${file.name}`);
@@ -179,14 +181,12 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
           : analysisData || { extractedText });
       
       // Traitement spécial pour les bulletins de classe du Collège Romain Rolland
-      const isRomainRolland = extractedText && 
-        extractedText.includes("COLLEGE ROMAIN ROLLAND") && 
+      const isRomainRolland = extractedText && extractedText.includes("COLLEGE ROMAIN ROLLAND") && 
         extractedText.includes("Appréciations générales de la classe");
 
-     if (type === 'class' && 
-    (dataToUse?.classSummary || 
-     (extractedText && /appréciations.*générales/i.test(extractedText) && 
-      extractedText.match(/([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉèêàôùûç\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi))) {
+      if (type === 'class' && extractedText && 
+          (/appréciations.*générales/i.test(extractedText) || 
+           (extractedText.match(/([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉèêàôùûç\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi) || []).length > 0)) {
         console.log("Traitement spécial pour bulletin avec appréciations par matière");
         
         // Si nous avons une synthèse de classe déjà extraite, l'utiliser comme base
