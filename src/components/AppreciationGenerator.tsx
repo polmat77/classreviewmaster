@@ -183,8 +183,11 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
         extractedText.includes("COLLEGE ROMAIN ROLLAND") && 
         extractedText.includes("Appréciations générales de la classe");
 
-      if (type === 'class' && (dataToUse?.classSummary || isRomainRolland)) {
-        console.log("Traitement spécial pour bulletin Romain Rolland");
+     if (type === 'class' && 
+    (dataToUse?.classSummary || 
+     (extractedText && /appréciations.*générales/i.test(extractedText) && 
+      extractedText.match(/([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉèêàôùûç\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi))) {
+        console.log("Traitement spécial pour bulletin avec appréciations par matière");
         
         // Si nous avons une synthèse de classe déjà extraite, l'utiliser comme base
         const classSummary = dataToUse?.classSummary || '';
