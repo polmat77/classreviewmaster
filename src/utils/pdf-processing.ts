@@ -742,7 +742,7 @@ export async function parseClassBulletins(
             } else if (currentSubject) {
               // Check if the line contains a numeric average
               const avgMatch = line.match(/(\d+[,.]\d+)\/20/);
-              if (avgMatch && current Subject.average === null) {
+              if (avgMatch && currentSubject.average === null) {
                 // Parse the first number as the student's average for that subject
                 currentSubject.average = parseFloat(avgMatch[1].replace(',', '.'));
                 // Remove the number from the line when taking it as comment
