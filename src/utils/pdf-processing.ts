@@ -643,7 +643,7 @@ export async function parseClassBulletins(
     /**
  * Extrait les appréciations générales d'un bulletin de classe au format Collège Romain Rolland
  */
-function extractRomainRollandClassAppreciations(textContent: string[]): { 
+function extractClassSubjectAppreciations(textContent: string[])
   classAppreciation: string;
   subjects: Array<{ 
     name: string;
@@ -717,9 +717,9 @@ function extractRomainRollandClassAppreciations(textContent: string[]): {
 const isClassBulletinFormat = detectClassBulletinFormat(structuredPages);
 
 // Détecter si c'est un bulletin de classe du Collège Romain Rolland
-const isRomainRollandFormat = firstPage.items.some((item: any) => 
-  /COLLEGE ROMAIN ROLLAND/i.test(item.text)
-) || fullTextArray.join(' ').includes("Appréciations générales de la classe");
+const isClassBulletinWithSubjectAppreciations = firstPage.items.some((item: any) => 
+  /bulletins?.*classe/i.test(item.text) || /appréciations.*générales/i.test(item.text)
+) || fullTextArray.join(' ').match(/([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉèêàôùûç\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi;
 
 let result: ClassBulletinResult;
 
