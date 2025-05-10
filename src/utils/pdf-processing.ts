@@ -649,8 +649,8 @@ export async function parseClassBulletins(
       
       let result: ClassBulletinResult;
       
-      if (isRomainRollandFormat) {
-        console.log("Bulletin de classe du Collège Romain Rolland détecté");
+      if (isClassBulletinWithSubjectAppreciations) {
+  console.log("Bulletin de classe avec appréciations par matière détecté");
         
         // Extraire les appréciations du bulletin
         const { classAppreciation, subjects: subjectAppreciations } = extractClassSubjectAppreciations(fullTextArray);
