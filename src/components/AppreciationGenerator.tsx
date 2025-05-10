@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,6 +29,11 @@ interface AppreciationGeneratorProps {
     }>;
   };
 }
+
+const toneMap: Record<string, string> = {
+  neutre: 'neutre',
+  // Add other tone mappings as needed
+};
 
 const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   type,
@@ -98,14 +102,14 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
                   subjects: student.subjects.map(subj => ({
                     name: subj.subject,
                     grade: subj.average || 0,
-                    comment: subj.remark,
+                    comment: subj.remark || '',
                     teacher: subj.teacher || ""
                   })),
                   average: student.subjects.reduce(
                     (sum, subj) => sum + (subj.average || 0), 0
                   ) / student.subjects.filter(s => s.average !== null).length
                 })),
-                classSummary: bulletinResult.classSummary
+                classSummary: bulletinResult.classSummary || ''
               };
               
               // Utiliser ces données pour l'analyse
@@ -117,7 +121,7 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
               const pdfText = await extractTextFromPDF(file, progress => {
                 setExtractionProgress(progress);
               });
-              setExtractedText(pdfText);
+              setExtractedText(pdfText || '');
             }
           } catch (err) {
             console.error("Erreur lors de l'analyse des bulletins:", err);
@@ -128,13 +132,13 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
               const pdfText = await extractTextFromPDF(file, progress => {
                 setExtractionProgress(progress);
               });
-              setExtractedText(pdfText);
+              setExtractedText(pdfText || '');
               
               // Auto-détection de certains éléments basée sur le texte extrait
-              const classMatch = pdfText.match(/Classe\s*:?\s*(\d+)/i);
-              const trimestreMatch = pdfText.match(/Trimestre\s*(\d)/i);
+              const classMatch = (pdfText || '').match(/Classe\s*:?\s*(\d+)/i);
+              const trimestreMatch = (pdfText || '').match(/Trimestre\s*(\d)/i);
               
-              toast.info(`Texte extrait avec succès (${pdfText.length} caractères)`);
+              toast.info(`Texte extrait avec succès (${(pdfText || '').length} caractères)`);
               toast.info(`Cliquez sur "Générer l'appréciation" pour continuer.`);
             } catch (textError) {
               console.error("Erreur également avec l'extraction de texte:", textError);
@@ -157,150 +161,6 @@ const AppreciationGenerator: React.FC<AppreciationGeneratorProps> = ({
   };
   
   const generateAppreciation = async (customData?: any) => {
-  // Si on n'a pas de données d'analyse mais des fichiers, on utilise les fichiers directement
-  if (!analysisData && !customData && classReportFiles.length === 0 && !extractedText) {
-    toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer des fichiers.");
-    return;
-  }
-  
-  setIsGenerating(true);
-  
-  try {
-    let result = '';
-    
-    // Utiliser les données personnalisées ou d'analyse si disponibles, sinon utiliser le texte extrait
-    const dataToUse = customData || 
-      (type === 'individual' && student 
-        ? { student, classData: analysisData }
-        : analysisData || { extractedText });
-    
-    // Traitement spécial pour les bulletins de classe du Collège Romain Rolland
-    if (type === 'class' && 
-        (dataToUse?.classSummary || 
-         (extractedText && extractedText.includes("COLLEGE ROMAIN ROLLAND") && 
-          extractedText.includes("Appréciations générales de la classe")))) {
-      
-      console.log("Traitement spécial pour bulletin Romain Rolland");
-      
-      // Si nous avons une synthèse de classe déjà extraite, l'utiliser comme base
-      if (dataToUse?.classSummary && dataToUse.classSummary.length > 100) {
-        result = dataToUse.classSummary;
-        
-        // Si le résumé est déjà suffisamment long, on l'utilise directement
-        if (result.length > 200) {
-          toast.success('Appréciation extraite du bulletin avec succès');
-          setAppreciation(result);
-          if (onAppreciationGenerated) {
-            onAppreciationGenerated(result);
-          }
-          return;
-        }
-      }
-      
-      // Extraction des appréciations par matière si disponibles
-      const subjectRemarks = [];
-      
-      if (dataToUse?.students && dataToUse.students[0]?.subjects) {
-        // Format venant de l'analyse de bulletins
-        const subjects = dataToUse.students[0].subjects;
-        for (const subject of subjects) {
-          if (subject.remark && subject.remark.length > 10) {
-            subjectRemarks.push(`${subject.subject}: ${subject.remark}`);
-          }
-        }
-      } else if (extractedText) {
-        // Extraction directe depuis le texte
-        const subjectPattern = /([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉÈÊÀÔÙÛÇ\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi;
-        
-        let match;
-        while ((match = subjectPattern.exec(extractedText)) !== null) {
-          if (match[1] && match[4]) {
-            const subjectName = match[1].trim();
-            const appreciation = match[4].trim().replace(/\s+/g, ' ');
-            
-            if (!subjectName.includes('POLE') && !subjectName.includes('OPTIONS') && appreciation.length > 10) {
-              subjectRemarks.push(`${subjectName}: ${appreciation}`);
-            }
-          }
-        }
-      }
-      
-      // Si nous avons des appréciations par matière, générer une synthèse
-      if (subjectRemarks.length > 0) {
-        const prompt = `
-Vous êtes un professeur principal qui doit rédiger une appréciation générale de classe pour le conseil de classe.
-
-Voici les appréciations des professeurs par matière:
-${subjectRemarks.map(r => `- ${r}`).join("\n")}
-
-Rédigez une appréciation synthétique cohérente pour cette classe (environ ${length[0]} mots) qui:
-1. Résume les points forts et les difficultés mentionnés dans les appréciations
-2. Conserve le ton général utilisé par les professeurs (${toneMap[tone]})
-3. Propose des axes d'amélioration adaptés
-4. Reste cohérent avec les commentaires des différentes matières
-
-Appréciation générale:`;
-
-        result = await OpenAIService.generateText(prompt);
-      } else {
-        // Si aucune appréciation spécifique n'a été trouvée, générer une appréciation générique
-        result = await OpenAIService.generateClassAppreciation(
-          dataToUse,
-          tone,
-          length[0]
-        );
-      }
-    } else if (type === 'individual' && student) {
-      result = await OpenAIService.generateStudentAppreciation(
-        student.name,
-        dataToUse,
-        tone,
-        length[0]
-      );
-    } else {
-      // Si on a du texte extrait, l'inclure dans la demande
-      if (extractedText && !customData) {
-        result = await OpenAIService.generateClassAppreciation(
-          { extractedText, files: classReportFiles.map(f => f.name) },
-          tone,
-          length[0]
-        );
-      } else {
-        // Utiliser les données d'analyse ou personnalisées
-        result = await OpenAIService.generateClassAppreciation(
-          dataToUse,
-          tone,
-          length[0]
-        );
-      }
-    }
-    
-    setAppreciation(result);
-    if (onAppreciationGenerated) {
-      onAppreciationGenerated(result);
-    }
-    
-    toast.success('Appréciation générée avec succès');
-  } catch (error) {
-    console.error('Error generating appreciation:', error);
-    toast.error('Erreur lors de la génération de l\'appréciation');
-    
-    // Générer une appréciation de secours en cas d'erreur
-    const fallbackAppreciation = `Classe dynamique qui a fait preuve d'implication tout au long du ${type === 'individual' ? 'trimestre' : 'trimestre'}. 
-    Les résultats sont globalement satisfaisants avec quelques élèves en difficulté qui nécessitent un suivi particulier. 
-    La moyenne de classe est correcte, mais pourrait être améliorée avec plus de rigueur dans le travail personnel. 
-    Je vous encourage à maintenir vos efforts et à continuer sur cette lancée pour la suite de l'année.`;
-    
-    setAppreciation(fallbackAppreciation);
-    if (onAppreciationGenerated) {
-      onAppreciationGenerated(fallbackAppreciation);
-    }
-    
-    toast.info('Une appréciation standard a été générée à la place');
-  } finally {
-    setIsGenerating(false);
-  }
-};
     // Si on n'a pas de données d'analyse mais des fichiers, on utilise les fichiers directement
     if (!analysisData && !customData && classReportFiles.length === 0 && !extractedText) {
       toast.error("Aucune donnée d'analyse disponible. Veuillez d'abord importer des fichiers.");
@@ -318,7 +178,84 @@ Appréciation générale:`;
           ? { student, classData: analysisData }
           : analysisData || { extractedText });
       
-      if (type === 'individual' && student) {
+      // Traitement spécial pour les bulletins de classe du Collège Romain Rolland
+      const isRomainRolland = extractedText && 
+        extractedText.includes("COLLEGE ROMAIN ROLLAND") && 
+        extractedText.includes("Appréciations générales de la classe");
+
+      if (type === 'class' && (dataToUse?.classSummary || isRomainRolland)) {
+        console.log("Traitement spécial pour bulletin Romain Rolland");
+        
+        // Si nous avons une synthèse de classe déjà extraite, l'utiliser comme base
+        const classSummary = dataToUse?.classSummary || '';
+        if (classSummary.length > 100) {
+          result = classSummary;
+          
+          // Si le résumé est déjà suffisamment long, on l'utilise directement
+          if (result.length > 200) {
+            toast.success('Appréciation extraite du bulletin avec succès');
+            setAppreciation(result);
+            if (onAppreciationGenerated) {
+              onAppreciationGenerated(result);
+            }
+            return;
+          }
+        }
+        
+        // Extraction des appréciations par matière si disponibles
+        const subjectRemarks = [];
+        
+        if (dataToUse?.students && dataToUse.students[0]?.subjects) {
+          // Format venant de l'analyse de bulletins
+          const subjects = dataToUse.students[0].subjects;
+          for (const subject of subjects) {
+            if (subject.remark && subject.remark.length > 10) {
+              subjectRemarks.push(`${subject.subject}: ${subject.remark}`);
+            }
+          }
+        } else if (extractedText) {
+          // Extraction directe depuis le texte
+          const subjectPattern = /([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉÈÊÀÔÙÛÇ\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi;
+          
+          let match;
+          while ((match = subjectPattern.exec(extractedText)) !== null) {
+            if (match[1] && match[4]) {
+              const subjectName = match[1].trim();
+              const appreciation = match[4].trim().replace(/\s+/g, ' ');
+              
+              if (!subjectName.includes('POLE') && !subjectName.includes('OPTIONS') && appreciation.length > 10) {
+                subjectRemarks.push(`${subjectName}: ${appreciation}`);
+              }
+            }
+          }
+        }
+        
+        // Si nous avons des appréciations par matière, générer une synthèse
+        if (subjectRemarks.length > 0) {
+          const prompt = `
+Vous êtes un professeur principal qui doit rédiger une appréciation générale de classe pour le conseil de classe.
+
+Voici les appréciations des professeurs par matière:
+${subjectRemarks.map(r => `- ${r}`).join("\n")}
+
+Rédigez une appréciation synthétique cohérente pour cette classe (environ ${length[0]} mots) qui:
+1. Résume les points forts et les difficultés mentionnés dans les appréciations
+2. Conserve le ton général utilisé par les professeurs (${toneMap[tone]})
+3. Propose des axes d'amélioration adaptés
+4. Reste cohérent avec les commentaires des différentes matières
+
+Appréciation générale:`;
+
+          result = await OpenAIService.generateText(prompt);
+        } else {
+          // Si aucune appréciation spécifique n'a été trouvée, générer une appréciation générique
+          result = await OpenAIService.generateClassAppreciation(
+            dataToUse,
+            tone,
+            length[0]
+          );
+        }
+      } else if (type === 'individual' && student) {
         result = await OpenAIService.generateStudentAppreciation(
           student.name,
           dataToUse,
