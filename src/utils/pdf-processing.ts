@@ -640,121 +640,42 @@ export async function parseClassBulletins(
           console.error(`Error processing structured text from page ${pageNum}:`, error);
         }
       }
-    /**
- * Extrait les appréciations générales d'un bulletin de classe au format Collège Romain Rolland
- */
-function extractClassSubjectAppreciations(textContent: string[])
-  classAppreciation: string;
-  subjects: Array<{ 
-    name: string;
-    teacher?: string;
-    average?: number;
-    appreciation: string;
-  }>;
-} {
-  const fullText = textContent.join(' ');
-  const subjects: Array<{ name: string; teacher?: string; average?: number; appreciation: string }> = [];
-  
-  // Chercher les appréciations par matière
-  // Format typique: "MATIÈRE\nM. PROFESSEUR\n10,77\nAppréciation de la matière"
-  const subjectPattern = /([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉÈÊÀÔÙÛÇ\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi;
-  
-  let match;
-  while ((match = subjectPattern.exec(fullText)) !== null) {
-    if (match[1] && match[4]) {
-      const subjectName = match[1].trim();
-      const teacherName = match[2]?.trim();
-      const averageText = match[3]?.replace(',', '.');
-      const average = averageText ? parseFloat(averageText) : undefined;
-      const appreciation = match[4].trim()
-        .replace(/\s+/g, ' ') // Remplacer les espaces multiples
-        .replace(/POLE \w+/g, '') // Supprimer les mentions POLE
-        .trim();
       
-      // Ne pas ajouter de doublons (parfois le même nom apparaît plusieurs fois)
-      if (!subjects.some(s => s.name === subjectName) && 
-          appreciation.length > 10 && // Filtre les appréciations trop courtes
-          !subjectName.includes('POLE') && // Exclure les lignes d'en-tête POLE
-          !subjectName.includes('OPTIONS')) { // Exclure les lignes d'en-tête OPTIONS
-        subjects.push({
-          name: subjectName,
-          teacher: teacherName,
-          average,
-          appreciation
-        });
-      }
-    }
-  }
-  
-  // Extraire le résumé général si disponible, ou le construire à partir des appréciations
-  let classAppreciation = '';
-  
-  // Chercher une appréciation générale explicite
-  const generalAppreciationMatch = fullText.match(/Appréciation[s]? générale[s]? de la classe[^A-ZÉÈÊÀÔÙÛÇ]+(.*?)(?=\n\s*[A-ZÉÈÊÀÔÙÛÇ]{3,}|$)/i);
-  if (generalAppreciationMatch && generalAppreciationMatch[1]) {
-    classAppreciation = generalAppreciationMatch[1].trim();
-  } else {
-    // Si pas d'appréciation générale, construire un résumé à partir des appréciations par matière
-    const appreciationPhrases = subjects
-      .filter(s => s.appreciation && s.appreciation.length > 15)
-      .map(s => s.appreciation)
-      .slice(0, 3); // Prendre les 3 premières appréciations significatives
-    
-    if (appreciationPhrases.length > 0) {
-      classAppreciation = `Synthèse des appréciations par matière : ${appreciationPhrases.join(' ')}`;
-    }
-  }
-  
-  console.log(`Extrait ${subjects.length} matières avec appréciations`);
-  
-  return {
-    classAppreciation,
-    subjects
-  };
-}  
-      // Detect if this is a class bulletin (format similaire à l'image uploadée)
-      // Detect if this is a class bulletin (format similaire à l'image uploadée)
-const isClassBulletinFormat = detectClassBulletinFormat(structuredPages);
-
-// Détecter si c'est un bulletin de classe du Collège Romain Rolland
-const isClassBulletinWithSubjectAppreciations = firstPage.items.some((item: any) => 
-  /bulletins?.*classe/i.test(item.text) || /appréciations.*générales/i.test(item.text)
-) || fullTextArray.join(' ').match(/([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉèêàôùûç\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi;
-
-let result: ClassBulletinResult;
-
-if (isRomainRollandFormat) {
-  console.log("Bulletin de classe du Collège Romain Rolland détecté");
-  
-  // Extraire les appréciations du bulletin
-  const { classAppreciation, subjects: subjectAppreciations } = extractRomainRollandClassAppreciations(fullTextArray);
-  
-  // Formater pour le format de retour attendu
-  const student: StudentBulletin = {
-    name: "Classe entière",
-    class: "Bulletin de classe",
-    subjects: subjectAppreciations.map(subject => ({
-      subject: subject.name,
-      average: subject.average || null,
-      teacher: subject.teacher,
-      remark: subject.appreciation
-    }))
-  };
-  
-  if (onProgress) {
-    onProgress(95);
-  }
-  
-  // Retourner directement les résultats
-  result = {
-    students: [student],
-    classSummary: classAppreciation
-  };
-} else if (isClassBulletinFormat) {
-  console.log("Bulletin de classe détecté - format spécifique");
-  result = await parseClassBulletinFormat(structuredPages, onProgress);
-} else {
-  // Process as before for other bulletin formats
+      // Detect if this is a class bulletin
+      const firstPage = structuredPages[0];
+      const isRomainRollandFormat = firstPage?.items.some((item: any) => 
+        /COLLEGE ROMAIN ROLLAND/i.test(item.text)
+      );
+      
+      let result: ClassBulletinResult;
+      
+      if (isRomainRollandFormat) {
+        console.log("Bulletin de classe du Collège Romain Rolland détecté");
+        
+        // Extraire les appréciations du bulletin
+        const { classAppreciation, subjects: subjectAppreciations } = extractClassSubjectAppreciations(fullTextArray);
+        
+        // Formater pour le format de retour attendu
+        const student: StudentBulletin = {
+          name: "Classe entière",
+          class: "Bulletin de classe",
+          subjects: subjectAppreciations.map(subject => ({
+            subject: subject.name,
+            average: subject.average || null,
+            teacher: subject.teacher,
+            remark: subject.appreciation
+          }))
+        };
+        
+        if (onProgress) {
+          onProgress(95);
+        }
+        
+        result = {
+          students: [student],
+          classSummary: classAppreciation
+        };
+      } else {
         // Process as before for other bulletin formats
         const fullText = fullTextArray.join('\n');
         
@@ -821,7 +742,7 @@ if (isRomainRollandFormat) {
             } else if (currentSubject) {
               // Check if the line contains a numeric average
               const avgMatch = line.match(/(\d+[,.]\d+)\/20/);
-              if (avgMatch && currentSubject.average === null) {
+              if (avgMatch && current Subject.average === null) {
                 // Parse the first number as the student's average for that subject
                 currentSubject.average = parseFloat(avgMatch[1].replace(',', '.'));
                 // Remove the number from the line when taking it as comment
@@ -928,443 +849,76 @@ Synthèse pour la classe:`;
 }
 
 /**
- * Détecte si le format du document correspond à un bulletin de classe
+ * Extrait les appréciations générales d'un bulletin de classe au format Collège Romain Rolland
  */
-function detectClassBulletinFormat(structuredPages: any[]): boolean {
-  // Analyse la première page pour détecter les caractéristiques d'un bulletin de classe
-  if (structuredPages.length === 0) return false;
+function extractClassSubjectAppreciations(textContent: string[]): {
+  classAppreciation: string;
+  subjects: Array<{ 
+    name: string;
+    teacher?: string;
+    average?: number;
+    appreciation: string;
+  }>;
+} {
+  const fullText = textContent.join(' ');
+  const subjects: Array<{ name: string; teacher?: string; average?: number; appreciation: string }> = [];
   
-  const firstPage = structuredPages[0];
-  const items = firstPage.items;
+  // Chercher les appréciations par matière
+  // Format typique: "MATIÈRE\nM. PROFESSEUR\n10,77\nAppréciation de la matière"
+  const subjectPattern = /([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉÈÊÀÔÙÛÇ\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi;
   
-  // Chercher les indicateurs typiques d'un bulletin de classe
-  const bulletinHeaderFound = items.some((item: any) => 
-    /bulletin du \d+(er|ème|e)? trimestre/i.test(item.text)
-  );
-  
-  const tableStyleDetected = detectTableStructure(items);
-  const matiereFound = items.some((item: any) => /matière/i.test(item.text));
-  const appreciationFound = items.some((item: any) => /appréciation/i.test(item.text));
-  
-  // Vérifier si c'est un tableau de moyennes du Collège Romain Rolland
-  const isRomainRollandFormat = items.some((item: any) => 
-    /COLLEGE ROMAIN ROLLAND/i.test(item.text)
-  ) || items.some((item: any) => 
-    /Tableau des moyennes/i.test(item.text)
-  );
-  
-  // Si on trouve au moins deux indicateurs, c'est probablement un bulletin de classe
-  const indicators = [bulletinHeaderFound, tableStyleDetected, matiereFound, appreciationFound, isRomainRollandFormat];
-  const scoreThreshold = 2;
-  const score = indicators.filter(Boolean).length;
-  
-  console.log(`Format detection - Score: ${score}/${scoreThreshold} (bulletin: ${bulletinHeaderFound}, table: ${tableStyleDetected}, matière: ${matiereFound}, appréciations: ${appreciationFound}, Romain Rolland: ${isRomainRollandFormat})`);
-  
-  return score >= scoreThreshold;
-}
-
-/**
- * Détecte si le document contient une structure de tableau
- */
-function detectTableStructure(items: any[]): boolean {
-  // Grouper par ligne (y-coordinate)
-  const yTolerance = 5;
-  const rowGroups = new Map<number, any[]>();
-  
-  items.forEach(item => {
-    const roundedY = Math.round(item.y / yTolerance) * yTolerance;
-    if (!rowGroups.has(roundedY)) {
-      rowGroups.set(roundedY, []);
-    }
-    rowGroups.get(roundedY)!.push(item);
-  });
-  
-  // Vérifier si les éléments sont alignés en colonnes
-  if (rowGroups.size < 3) return false; // Pas assez de lignes
-  
-  // Compter combien de lignes ont plusieurs éléments alignés horizontalement
-  let alignedRows = 0;
-  for (const [_, row] of rowGroups) {
-    if (row.length >= 3) { // Au moins 3 éléments par ligne
-      alignedRows++;
-    }
-  }
-  
-  // S'il y a au moins 3 lignes avec des éléments alignés, c'est probablement un tableau
-  return alignedRows >= 3;
-}
-
-/**
- * Parse un bulletin de classe au format spécifique (comme celui de l'image)
- */
-async function parseClassBulletinFormat(structuredPages: any[], onProgress?: (progress: number) => void): Promise<ClassBulletinResult> {
-  if (onProgress) {
-    onProgress(60); // Start parsing the specialized format
-  }
-  
-  // Extraire les informations de l'en-tête
-  const headerInfo = extractBulletinHeader(structuredPages);
-  console.log("Bulletin header:", headerInfo);
-  
-  // Extraire la structure du tableau des matières et appréciations
-  const subjectsData = extractSubjectsTable(structuredPages);
-  console.log(`Extracted ${subjectsData.length} subjects from table`);
-  
-  // Créer un objet StudentBulletin avec les données extraites
-  const student: StudentBulletin = {
-    name: headerInfo.studentName || "Classe",
-    class: headerInfo.className || headerInfo.schoolName || "Non identifiée",
-    subjects: subjectsData.map(subject => ({
-      subject: subject.name,
-      average: subject.average,
-      teacher: subject.teacher,
-      remark: subject.comment
-    }))
-  };
-  
-  // Générer une synthèse de classe
-  let classSummary = headerInfo.classAppreciation || "";
-  
-  if (!classSummary && subjectsData.length > 0) {
-    if (onProgress) {
-      onProgress(80);
-    }
-    
-    try {
-      // Générer une synthèse à partir des appréciations par matière
-      const remarks = subjectsData
-        .filter(s => s.comment && s.comment.trim().length > 0)
-        .map(s => `${s.name} (${s.average || 'N/A'}/20): ${s.comment}`);
-      
-      if (remarks.length > 0) {
-        const prompt = `Vous êtes un professeur principal qui doit rédiger une synthèse pour le conseil de classe.
-Voici des appréciations par matière pour la classe ${headerInfo.className || ""}:
-
-${remarks.map(r => `- ${r}`).join("\n")}
-
-Rédigez un paragraphe de synthèse pour la classe entière (100-150 mots) qui:
-1. Identifie les points forts généraux de la classe
-2. Souligne les difficultés communes rencontrées
-3. Propose des axes d'amélioration
-4. Maintient un ton professionnel et constructif
-
-Synthèse pour la classe:`;
-
-        classSummary = await OpenAIService.generateText(prompt);
-      }
-    } catch (error) {
-      console.error("Error generating class summary:", error);
-      classSummary = "Impossible de générer une synthèse automatique.";
-    }
-  }
-  
-  if (onProgress) {
-    onProgress(95);
-  }
-  
-  // Retourner les résultats
-  return {
-    students: [student],
-    classSummary
-  };
-}
-
-/**
- * Extrait les informations de l'en-tête du bulletin
- */
-function extractBulletinHeader(structuredPages: any[]): any {
-  const firstPage = structuredPages[0];
-  const items = firstPage.items;
-  
-  const headerInfo: any = {
-    schoolName: "",
-    className: "",
-    studentName: "",
-    term: "",
-    year: "",
-    classAppreciation: ""
-  };
-  
-  // Rechercher le nom de l'établissement (souvent en haut de page, gros caractères)
-  const schoolNameItems = items
-    .filter((item: any) => item.y < 100 && item.fontSize > 10) // En haut de page
-    .sort((a: any, b: any) => b.fontSize - a.fontSize); // Trié par taille de police
-  
-  if (schoolNameItems.length > 0) {
-    headerInfo.schoolName = schoolNameItems[0].text;
-  }
-  
-  // Détecter s'il s'agit du Collège Romain Rolland
-  const romainRollandItems = items.filter((item: any) => 
-    /COLLEGE ROMAIN ROLLAND/i.test(item.text)
-  );
-  
-  if (romainRollandItems.length > 0) {
-    headerInfo.schoolName = "COLLEGE ROMAIN ROLLAND";
-  }
-  
-  // Rechercher le trimestre
-  const termRegex = /bulletin du (\d+(?:er|ème|e)? trimestre)/i;
-  for (const item of items) {
-    const match = item.text.match(termRegex);
-    if (match) {
-      headerInfo.term = match[1];
-      break;
-    }
-  }
-  
-  // Vérifier s'il y a une période spécifiée
-  const periodeRegex = /Période\s*:\s*([^,\n]+)/i;
-  const periodeItems = items.filter((item: any) => periodeRegex.test(item.text));
-  if (periodeItems.length > 0) {
-    const match = periodeItems[0].text.match(periodeRegex);
-    if (match) {
-      headerInfo.term = match[1].trim();
-    }
-  }
-  
-  // Rechercher l'année scolaire
-  const yearRegex = /année(?:\s+scolaire)?\s*:?\s*(20\d{2}[\/\-]20\d{2})/i;
-  for (const item of items) {
-    const match = item.text.match(yearRegex);
-    if (match) {
-      headerInfo.year = match[1];
-      break;
-    }
-  }
-  
-  // Rechercher la classe
-  const classRegex = /classe\s*:?\s*(.+?)(?=\s|\n|$)/i;
-  for (const item of items) {
-    const match = item.text.match(classRegex);
-    if (match) {
-      headerInfo.className = match[1].trim();
-      break;
-    }
-  }
-  
-  // Rechercher le titre "appréciation générale"
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (/appréciation[s]?\s+générale[s]?/i.test(item.text)) {
-      // Les textes suivants sont probablement l'appréciation générale
-      let appText = "";
-      let j = i + 1;
-      while (j < items.length && items[j].y < item.y + 100) {
-        // Collecter le texte jusqu'à la prochaine section ou un certain nombre de lignes
-        if (!/matière|moyenne|professeur/i.test(items[j].text)) {
-          appText += " " + items[j].text;
-        } else {
-          break;
-        }
-        j++;
-      }
-      headerInfo.classAppreciation = appText.trim();
-      break;
-    }
-  }
-  
-  return headerInfo;
-}
-
-/**
- * Extrait la table des matières et leurs appréciations
- */
-function extractSubjectsTable(structuredPages: any[]): any[] {
-  const subjects: any[] = [];
-  const firstPage = structuredPages[0];
-  
-  // Regrouper les éléments par ligne (y-coordinate)
-  const rows = groupItemsByRows(firstPage.items);
-  
-  // Identifier les lignes qui contiennent les matières
-  let currentSubject: any = null;
-  
-  for (const row of rows) {
-    // Détecter si c'est une ligne d'en-tête de matière
-    // Les matières sont souvent en gras ou en majuscules, parfois le texte est aligné à gauche
-    const potentialSubjectNameItem = row.find((item: any) => 
-      (item.fontName && item.fontName.includes('Bold')) ||
-      (item.text === item.text.toUpperCase() && item.text.length > 3) ||
-      item.x < 100 // Aligné à gauche
-    );
-    
-    if (potentialSubjectNameItem) {
-      // Vérifier si c'est une matière reconnue
-      const subjectName = potentialSubjectNameItem.text;
-      
-      if (isSubjectName(subjectName)) {
-        // Sauvegarder le sujet précédent si existe
-        if (currentSubject) {
-          subjects.push(currentSubject);
-        }
-        
-        // Initialiser un nouveau sujet
-        currentSubject = {
-          name: subjectName,
-          average: null,
-          teacher: "",
-          comment: ""
-        };
-        
-        // Rechercher la moyenne sur la même ligne
-        const averageItem = row.find((item: any) => {
-          const text = item.text;
-          return /^\d+([.,]\d+)?\/20$/.test(text.trim()) || 
-                (/^\d+([.,]\d+)?$/.test(text.trim()) && 
-                 parseFloat(text.replace(',', '.')) <= 20);
-        });
-        
-        if (averageItem) {
-          const avgText = averageItem.text.trim();
-          const numericPart = avgText.split('/')[0].trim();
-          currentSubject.average = parseFloat(numericPart.replace(',', '.'));
-        }
-        
-        // Rechercher le nom du professeur
-        const teacherItem = row.find((item: any) => {
-          const text = item.text.toLowerCase();
-          return text.includes("m.") || text.includes("mme") || 
-                 text.includes("mr") || text.includes("prof");
-        });
-        
-        if (teacherItem) {
-          currentSubject.teacher = teacherItem.text.trim();
-        }
-      } else if (currentSubject) {
-        // Si ce n'est pas une nouvelle matière, c'est probablement une partie de l'appréciation
-        currentSubject.comment += " " + row.map((item: any) => item.text).join(" ");
-      }
-    } else if (currentSubject) {
-      // Si ça n'a pas l'air d'être une nouvelle matière, ajouter à l'appréciation actuelle
-      const rowText = row.map((item: any) => item.text).join(" ");
-      if (rowText.trim() && !rowText.match(/^\d+([.,]\d+)?\/20$/)) {
-        currentSubject.comment += " " + rowText;
-      }
-    }
-  }
-  
-  // Ajouter le dernier sujet s'il existe
-  if (currentSubject) {
-    subjects.push(currentSubject);
-  }
-  
-  // Nettoyer les commentaires
-  subjects.forEach(subject => {
-    if (subject.comment) {
-      subject.comment = subject.comment.trim()
-        .replace(/\s+/g, ' ')  // Remplacer les espaces multiples
-        .replace(/^[\s\-:]+/, '')  // Enlever les caractères de début
+  let match;
+  while ((match = subjectPattern.exec(fullText)) !== null) {
+    if (match[1] && match[4]) {
+      const subjectName = match[1].trim();
+      const teacherName = match[2]?.trim();
+      const averageText = match[3]?.replace(',', '.');
+      const average = averageText ? parseFloat(averageText) : undefined;
+      const appreciation = match[4].trim()
+        .replace(/\s+/g, ' ') // Remplacer les espaces multiples
+        .replace(/POLE \w+/g, '') // Supprimer les mentions POLE
         .trim();
+      
+      // Ne pas ajouter de doublons (parfois le même nom apparaît plusieurs fois)
+      if (!subjects.some(s => s.name === subjectName) && 
+          appreciation.length > 10 && // Filtre les appréciations trop courtes
+          !subjectName.includes('POLE') && // Exclure les lignes d'en-tête POLE
+          !subjectName.includes('OPTIONS')) { // Exclure les lignes d'en-tête OPTIONS
+        subjects.push({
+          name: subjectName,
+          teacher: teacherName,
+          average,
+          appreciation
+        });
+      }
     }
-  });
+  }
   
-  return subjects;
-}
-
-/**
- * Regroupe les éléments textuels par lignes
- */
-function groupItemsByRows(items: any[]): any[][] {
-  const yTolerance = 5;
-  const rowGroups = new Map<number, any[]>();
+  // Extraire le résumé général si disponible, ou le construire à partir des appréciations
+  let classAppreciation = '';
   
-  items.forEach(item => {
-    const roundedY = Math.round(item.y / yTolerance) * yTolerance;
-    if (!rowGroups.has(roundedY)) {
-      rowGroups.set(roundedY, []);
+  // Chercher une appréciation générale explicite
+  const generalAppreciationMatch = fullText.match(/Appréciation[s]? générale[s]? de la classe[^A-ZÉÈÊÀÔÙÛÇ]+(.*?)(?=\n\s*[A-ZÉÈÊÀÔÙÛÇ]{3,}|$)/i);
+  if (generalAppreciationMatch && generalAppreciationMatch[1]) {
+    classAppreciation = generalAppreciationMatch[1].trim();
+  } else {
+    // Si pas d'appréciation générale, construire un résumé à partir des appréciations par matière
+    const appreciationPhrases = subjects
+      .filter(s => s.appreciation && s.appreciation.length > 15)
+      .map(s => s.appreciation)
+      .slice(0, 3); // Prendre les 3 premières appréciations significatives
+    
+    if (appreciationPhrases.length > 0) {
+      classAppreciation = `Synthèse des appréciations par matière : ${appreciationPhrases.join(' ')}`;
     }
-    rowGroups.get(roundedY)!.push(item);
-  });
-  
-  // Trier les lignes par position Y et les éléments par position X
-  return Array.from(rowGroups.entries())
-    .sort(([y1], [y2]) => y1 - y2)
-    .map(([_, row]) => row.sort((a, b) => a.x - b.x));
-}
-
-/**
- * Vérifie si le texte correspond à un nom de matière
- */
-function isSubjectName(text: string): boolean {
-  const normalizedText = text.trim().toUpperCase();
-  
-  // Liste des matières communes
-  const commonSubjects = [
-    'FRANÇAIS', 'MATHÉMATIQUES', 'MATHS', 'HISTOIRE', 'GÉOGRAPHIE', 
-    'ANGLAIS', 'ALLEMAND', 'ESPAGNOL', 'ITALIEN', 'PHYSIQUE', 'CHIMIE',
-    'SVT', 'SCIENCES', 'EPS', 'SPORT', 'TECHNOLOGIE', 'MUSIQUE',
-    'ARTS', 'PHILOSOPHIE', 'ÉCONOMIE', 'INFORMATIQUE', 'LATIN',
-    'HISTOIRE-GÉOGRAPHIE', 'PHYSIQUE-CHIMIE', 'EDUCATION MUSICALE',
-    'ARTS PLASTIQUES', 'POLE SCIENCES', 'POLE LITTERAIRE', 'ITALIEN BILANGUE',
-    'LANGUES VIVANTES', 'LV1', 'LV2'
-  ];
-  
-  // Vérifier si le texte correspond à une matière commune
-  if (commonSubjects.some(subject => normalizedText.includes(subject))) {
-    return true;
   }
   
-  // Vérifier si le texte a un format de matière (tout en majuscules ou commence par une majuscule)
-  if (normalizedText === text && text.length > 3) {
-    return true; // Tout en majuscules
-  }
+  console.log(`Extrait ${subjects.length} matières avec appréciations`);
   
-  // Considérer comme matière si c'est court et commence par une majuscule
-  if (text.length < 20 && /^[A-Z]/.test(text)) {
-    return true;
-  }
-  
-  return false;
-}
-
-/**
- * Generate a summary for an individual student based on their bulletin
- * @param studentBulletin The student's bulletin data
- * @returns A generated appreciation paragraph
- */
-export async function generateStudentSummary(studentBulletin: StudentBulletin): Promise<string> {
-  try {
-    console.log(`Generating summary for student: ${studentBulletin.name}`);
-    
-    // Collect all subject remarks
-    const remarks = studentBulletin.subjects
-      .filter(s => s.remark && s.remark.trim().length > 0)
-      .map(s => `${s.subject} (${s.average || 'N/A'}/20): ${s.remark}`);
-    
-    if (remarks.length === 0) {
-      return "Pas suffisamment de données pour générer une appréciation.";
-    }
-    
-    // Calculate average based on available subject averages
-    const validGrades = studentBulletin.subjects
-      .map(s => s.average)
-      .filter((avg): avg is number => avg !== null && avg !== undefined);
-    
-    const overallAverage = validGrades.length > 0
-      ? (validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length).toFixed(1)
-      : "N/A";
-    
-    // Build prompt for OpenAI
-    const prompt = `Vous êtes un professeur principal qui doit rédiger une appréciation globale pour l'élève ${studentBulletin.name} de la classe ${studentBulletin.class}, dont la moyenne générale est de ${overallAverage}/20.
-
-Voici les appréciations des professeurs par matière:
-
-${remarks.map(r => `- ${r}`).join("\n")}
-
-En vous basant sur ces remarques, rédigez une appréciation générale cohérente (100-150 mots) pour cet élève qui:
-1. Reflète fidèlement le contenu et le ton des appréciations par matière
-2. Souligne les points forts et les réussites
-3. Identifie les axes d'amélioration de façon constructive
-4. Maintient un style professionnel adapté à un bulletin scolaire officiel
-
-Appréciation globale de l'élève:`;
-
-    return await OpenAIService.generateText(prompt);
-  } catch (error) {
-    console.error('Error generating student summary:', error);
-    return "Erreur lors de la génération de l'appréciation. Veuillez réessayer ultérieurement.";
-  }
+  return {
+    classAppreciation,
+    subjects
+  };
 }
 
 /**
@@ -1418,5 +972,54 @@ export async function summarizeStudentBulletin(
   } catch (error) {
     console.error('Error processing student bulletin:', error);
     throw new Error(`Erreur lors du traitement du bulletin: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+  }
+}
+
+/**
+ * Generate a summary for an individual student based on their bulletin
+ * @param studentBulletin The student's bulletin data
+ * @returns A generated appreciation paragraph
+ */
+export async function generateStudentSummary(studentBulletin: StudentBulletin): Promise<string> {
+  try {
+    console.log(`Generating summary for student: ${studentBulletin.name}`);
+    
+    // Collect all subject remarks
+    const remarks = studentBulletin.subjects
+      .filter(s => s.remark && s.remark.trim().length > 0)
+      .map(s => `${s.subject} (${s.average || 'N/A'}/20): ${s.remark}`);
+    
+    if (remarks.length === 0) {
+      return "Pas suffisamment de données pour générer une appréciation.";
+    }
+    
+    // Calculate average based on available subject averages
+    const validGrades = studentBulletin.subjects
+      .map(s => s.average)
+      .filter((avg): avg is number => avg !== null && avg !== undefined);
+    
+    const overallAverage = validGrades.length > 0
+      ? (validGrades.reduce((sum, grade) => sum + grade, 0) / validGrades.length).toFixed(1)
+      : "N/A";
+    
+    // Build prompt for OpenAI
+    const prompt = `Vous êtes un professeur principal qui doit rédiger une appréciation globale pour l'élève ${studentBulletin.name} de la classe ${studentBulletin.class}, dont la moyenne générale est de ${overallAverage}/20.
+
+Voici les appréciations des professeurs par matière:
+
+${remarks.map(r => `- ${r}`).join("\n")}
+
+En vous basant sur ces remarques, rédigez une appréciation générale cohérente (100-150 mots) pour cet élève qui:
+1. Reflète fidèlement le contenu et le ton des appréciations par matière
+2. Souligne les points forts et les réussites
+3. Identifie les axes d'amélioration de façon constructive
+4. Maintient un style professionnel adapté à un bulletin scolaire officiel
+
+Appréciation globale de l'élève:`;
+
+    return await OpenAIService.generateText(prompt);
+  } catch (error) {
+    console.error('Error generating student summary:', error);
+    return "Erreur lors de la génération de l'appréciation. Veuillez réessayer ultérieurement.";
   }
 }
