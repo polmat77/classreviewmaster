@@ -713,14 +713,48 @@ function extractRomainRollandClassAppreciations(textContent: string[]): {
   };
 }  
       // Detect if this is a class bulletin (format similaire à l'image uploadée)
-      const isClassBulletinFormat = detectClassBulletinFormat(structuredPages);
-      
-      let result: ClassBulletinResult;
-      
-      if (isClassBulletinFormat) {
-        console.log("Bulletin de classe détecté - format spécifique");
-        result = await parseClassBulletinFormat(structuredPages, onProgress);
-      } else {
+      // Detect if this is a class bulletin (format similaire à l'image uploadée)
+const isClassBulletinFormat = detectClassBulletinFormat(structuredPages);
+
+// Détecter si c'est un bulletin de classe du Collège Romain Rolland
+const isRomainRollandFormat = firstPage.items.some((item: any) => 
+  /COLLEGE ROMAIN ROLLAND/i.test(item.text)
+) || fullTextArray.join(' ').includes("Appréciations générales de la classe");
+
+let result: ClassBulletinResult;
+
+if (isRomainRollandFormat) {
+  console.log("Bulletin de classe du Collège Romain Rolland détecté");
+  
+  // Extraire les appréciations du bulletin
+  const { classAppreciation, subjects: subjectAppreciations } = extractRomainRollandClassAppreciations(fullTextArray);
+  
+  // Formater pour le format de retour attendu
+  const student: StudentBulletin = {
+    name: "Classe entière",
+    class: "Bulletin de classe",
+    subjects: subjectAppreciations.map(subject => ({
+      subject: subject.name,
+      average: subject.average || null,
+      teacher: subject.teacher,
+      remark: subject.appreciation
+    }))
+  };
+  
+  if (onProgress) {
+    onProgress(95);
+  }
+  
+  // Retourner directement les résultats
+  result = {
+    students: [student],
+    classSummary: classAppreciation
+  };
+} else if (isClassBulletinFormat) {
+  console.log("Bulletin de classe détecté - format spécifique");
+  result = await parseClassBulletinFormat(structuredPages, onProgress);
+} else {
+  // Process as before for other bulletin formats
         // Process as before for other bulletin formats
         const fullText = fullTextArray.join('\n');
         
