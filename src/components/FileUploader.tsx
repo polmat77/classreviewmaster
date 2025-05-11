@@ -102,7 +102,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           const pdfBuffer = await file.arrayBuffer();
           const table = await extractGradesTable(pdfBuffer);
           console.log(`Tableau extrait pour ${file.name} :`, table);
-          // TODO : transformer ‘table’ en JSON et le passer à votre processStatistics(data)
+          // TODO : transformer 'table' en JSON et le passer à votre processStatistics(data)
         } catch (err) {
           console.warn(`Impossible d'extraire le tableau de ${file.name}`, err);
           throw new Error("Erreur lors de l'extraction du tableau. Vérifiez le format de vos fichiers.");
@@ -262,7 +262,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             <div className="text-sm text-muted-foreground">
               {processingMessage || "Traitement des fichiers..."}
             </div>
-            <div className="text-sm font-medium`}>{`Math.round(progress)`}%</div>
+            <div className="text-sm font-medium">{Math.round(progress)}%</div>
           </div>
           <Progress value={progress} className="h-2" />
           <p className="text-xs text-muted-foreground">
@@ -297,7 +297,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             {files.map((file, index) => (
               <div
                 key={`${file.name}-${index}`}
-                className="flex items-center justify-between bg-accent/50 p-2 rounded-md",
+                className="flex items-center justify-between bg-accent/50 p-2 rounded-md"
               >
                 <div className="flex items-center gap-2">
                   <FileIcon className="h-4 w-4 text-primary" />
