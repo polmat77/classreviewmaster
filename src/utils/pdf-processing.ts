@@ -856,7 +856,7 @@ Synthèse pour la classe:`;
 /**
  * Extrait les appréciations générales d'un bulletin de classe au format Collège Romain Rolland
  */
-function extractClassSubjectAppreciations(textContent: string[]): {
+function extractClassSubjectAppreciations(textContent: string[] | null): {
   classAppreciation: string;
   subjects: Array<{ 
     name: string;
@@ -865,6 +865,14 @@ function extractClassSubjectAppreciations(textContent: string[]): {
     appreciation: string;
   }>;
 } {
+  if (!textContent || !Array.isArray(textContent)) {
+    console.warn('textContent is not an array, returning empty result');
+    return {
+      classAppreciation: '',
+      subjects: []
+    };
+  }
+
   if (!Array.isArray(textContent)) {
     console.warn('textContent is not an array, returning empty result');
     return {
@@ -874,6 +882,14 @@ function extractClassSubjectAppreciations(textContent: string[]): {
   }
 
   const fullText = textContent.join(' ');
+  if (typeof fullText !== 'string') {
+    console.warn('Joined text content is not a string, returning empty result');
+    return {
+      classAppreciation: '',
+      subjects: []
+    };
+  }
+
   if (typeof fullText !== 'string') {
     console.warn('Joined text content is not a string, returning empty result');
     return {

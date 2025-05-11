@@ -257,6 +257,7 @@ function createStudentObjects(
   let nameColumnText = nameColumn?.text;
   if (!nameColumnText && columns.length > 0) {
     nameColumnText = columns[0].text;
+    console.log("Aucune colonne de nom explicite trouvée, utilisation de la première colonne comme noms d'élèves");
   }
   
   if (!nameColumnText) {
@@ -270,7 +271,10 @@ function createStudentObjects(
   const subjectColumns = columns.filter(col => col.type === 'subject');
   
   return dataRows
-    .filter(row => row.get(nameColumnText!)?.trim())
+    .filter(row => {
+      const name = row.get(nameColumnText!);
+      return name && name.trim && name.trim().length > 0;
+    })
     .map(row => {
       const name = row.get(nameColumnText!) || '';
       
