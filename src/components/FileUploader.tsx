@@ -1,10 +1,11 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, File, X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Upload, File as FileIcon, X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { validatePdfFile, initPdfJs } from '@/utils/pdf-service';
+import { extractGradesTable } from '@/utils/pdfTableExtractor';
 import { Progress } from '@/components/ui/progress';
 import { ProgressStatus } from '@/utils/api/types';
 
@@ -85,7 +86,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         initPdfJs(true);
       } catch (error) {
         console.warn("Erreur lors de la réinitialisation de PDF.js, continuation avec l'état actuel");
-        // On augmente quand même le nombre de tentatives pour l'effet useEffect
         setInitAttempt(prev => prev + 1);
       }
       
@@ -96,7 +96,18 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       for (let i = 0; i < pdfFiles.length; i++) {
         const file = pdfFiles[i];
         setProcessingMessage(`Validation du fichier ${i + 1}/${pdfFiles.length}: ${file.name}`);
-        
+
+        // --- NOUVEAU : extraction du tableau de notes depuis le PDF ---
+        try {
+          const pdfBuffer = await file.arrayBuffer();
+          const table = await extractGradesTable(pdfBuffer);
+          console.log(`Tableau extrait pour ${file.name} :`, table);
+          // TODO : transformer ‘table’ en JSON et le passer à votre processStatistics(data)
+        } catch (err) {
+          console.warn(`Impossible d'extraire le tableau de ${file.name}`, err);
+          throw new Error("Erreur lors de l'extraction du tableau. Vérifiez le format de vos fichiers.");
+        }
+
         try {
           // Montrer la progression
           setProgress(((i) / pdfFiles.length) * 50);
@@ -105,9 +116,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           const validationPromise = validatePdfFile(file);
           const timeoutPromise = new Promise<{isValid: boolean, reason: string}>((resolve) => {
             setTimeout(() => resolve({
-              isValid: true,  // On accepte le fichier même en cas de timeout
+              isValid: true,
               reason: "Timeout dépassé mais fichier accepté quand même"
-            }), 20000); // 20 secondes
+            }), 20000);
           });
           
           const validationResult = await Promise.race([validationPromise, timeoutPromise]);
@@ -116,22 +127,19 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             validPdfCount++;
             validatedFiles.push(file);
             
-            // Avertir si le fichier a été accepté malgré des problèmes
             if (validationResult.reason) {
               toast.warning(`${file.name}: ${validationResult.reason}`);
             }
           } else {
             console.warn(`Validation échouée pour ${file.name}: ${validationResult.reason}`);
-            // On accepte quand même le fichier avec un avertissement
             toast.warning(`Le fichier ${file.name} pourrait poser des problèmes (${validationResult.reason})`);
-            validatedFiles.push(file); // On l'ajoute quand même
+            validatedFiles.push(file);
             validPdfCount++;
           }
         } catch (error) {
           console.error(`Error validating ${file.name}:`, error);
-          // On accepte quand même le fichier avec un avertissement
           toast.warning(`Le fichier ${file.name} n'a pas pu être validé mais sera utilisé quand même`);
-          validatedFiles.push(file); // On l'ajoute quand même
+          validatedFiles.push(file);
           validPdfCount++;
         }
         
@@ -162,7 +170,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       setValidationError(`Erreur lors du traitement des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
       setValidationStatus(ProgressStatus.ERROR);
       
-      // Message plus clair sur les causes possibles
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
       if (errorMessage.includes("worker") || errorMessage.includes("PDF.js")) {
         toast.error("Problème avec le moteur de traitement PDF. Essayez de recharger la page.", {
@@ -172,7 +179,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         toast.error("Une erreur s'est produite lors du traitement des fichiers");
       }
       
-      // Accepter quand même les fichiers en cas d'erreur pour permettre quand même l'utilisation
       setFiles(prev => [...prev, ...acceptedFiles]);
       onFilesAccepted(acceptedFiles);
       toast.info("Les fichiers ont été acceptés malgré l'erreur", {
@@ -187,7 +193,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: acceptedFileTypes.reduce((acc, type) => {
-      // Map file extensions to MIME types
       if (type === '.pdf') acc['application/pdf'] = ['.pdf'];
       else if (['.xls', '.xlsx'].includes(type)) {
         acc['application/vnd.ms-excel'] = ['.xls'];
@@ -206,7 +211,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setValidationError(null);
     setValidationStatus(ProgressStatus.IDLE);
     setInitError(null);
-    // Forcer une réinitialisation complète de PDF.js
     setInitAttempt(prev => prev + 1);
   };
 
@@ -229,7 +233,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           </div>
         </div>
       )}
-    
+      
       <div
         {...getRootProps()}
         className={cn(
@@ -258,7 +262,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             <div className="text-sm text-muted-foreground">
               {processingMessage || "Traitement des fichiers..."}
             </div>
-            <div className="text-sm font-medium">{Math.round(progress)}%</div>
+            <div className="text-sm font-medium`}>{`Math.round(progress)`}%</div>
           </div>
           <Progress value={progress} className="h-2" />
           <p className="text-xs text-muted-foreground">
@@ -293,10 +297,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             {files.map((file, index) => (
               <div
                 key={`${file.name}-${index}`}
-                className="flex items-center justify-between bg-accent/50 p-2 rounded-md"
+                className="flex items-center justify-between bg-accent/50 p-2 rounded-md",
               >
                 <div className="flex items-center gap-2">
-                  <File className="h-4 w-4 text-primary" />
+                  <FileIcon className="h-4 w-4 text-primary" />
                   <span className="text-sm truncate max-w-[200px]">{file.name}</span>
                   <span className="text-xs text-muted-foreground">
                     ({(file.size / (1024 * 1024)).toFixed(1)} MB)
