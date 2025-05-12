@@ -1,3 +1,6 @@
+je me suis trompé, voici le csvparser.ts
+voici le contenu du csvparser.ts:
+
 voici le contenu du csvparser.ts:
 // src/utils/CSVParser.ts
 import \* as XLSX from 'xlsx';
@@ -330,5 +333,7 @@ return notes.length > 0
 ? notes.reduce((sum, note) => sum + note, 0) / notes.length
 : 0;
 };
+
+réécris le en mettant les corrections
 
 réécris le en mettant les corrections
