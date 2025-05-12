@@ -623,5 +623,7 @@ Appréciation globale de l'élève:`;
 }
 
 export { parseClassBulletins }
+console.warn('parseClassBulletins is not implemented yet.');
+
 
 export { parseGradeTable }
