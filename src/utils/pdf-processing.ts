@@ -623,3 +623,5 @@ Appréciation globale de l'élève:`;
 }
 
 export { parseClassBulletins }
+
+export { parseGradeTable }
