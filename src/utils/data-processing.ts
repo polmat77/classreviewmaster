@@ -1,6 +1,7 @@
 import { parseExcelFile, parseCsvFile, parsePdfFile, ParsedFileData, parseBulletin, BulletinData, parseMultiBulletins } from './file-parsers';
 import { extractTextFromPDF } from './pdf-service';
 import { toast } from 'sonner';
+import Papa from 'papaparse';
 
 /**
  * Process uploaded grade files
@@ -24,18 +25,22 @@ export const processGradeFiles = async (files: File[]) => {
   try {
     // Sort files by type for processing
     const currentTermFiles = files.filter(file => !file.name.toLowerCase().includes('prev'));
-    const previousTermFiles = files.filter(file => file.name.toLowerCase().includes('prev'));
+    const previousTermFiles = files.filter(file => file.name.toLowerCase().includes('prev') || file.name.toLowerCase().includes('trim1'));
     
     // Process current term files
     const currentTermResults = await Promise.all(currentTermFiles.map(async file => {
       const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
       
       if (['xlsx', 'xls'].includes(fileExtension)) {
-        return parseExcelFile(file);
+        return await parseExcelFile(file);
       } else if (fileExtension === 'csv') {
-        return parseCsvFile(file);
+        return await parseCsvFile(file);
       } else if (fileExtension === 'pdf') {
-        return parsePdfFile(file);
+        return await parsePdfFile(file);
+      } else if (fileExtension === 'json') {
+        // Handle JSON files (for testing)
+        const text = await readFileAsText(file);
+        return JSON.parse(text);
       }
       
       throw new Error(`Unsupported file format: ${fileExtension}`);
@@ -44,13 +49,17 @@ export const processGradeFiles = async (files: File[]) => {
     // Process previous term files if available
     const previousTermResults = await Promise.all(previousTermFiles.map(async file => {
       const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-      
+
       if (['xlsx', 'xls'].includes(fileExtension)) {
-        return parseExcelFile(file);
+        return await parseExcelFile(file);
       } else if (fileExtension === 'csv') {
-        return parseCsvFile(file);
+        return await parseCsvFile(file);
       } else if (fileExtension === 'pdf') {
-        return parsePdfFile(file);
+        return await parsePdfFile(file);
+      } else if (fileExtension === 'json') {
+        // Handle JSON files (for testing)
+        const text = await readFileAsText(file);
+        return JSON.parse(text);
       }
       
       throw new Error(`Unsupported file format: ${fileExtension}`);
@@ -62,10 +71,22 @@ export const processGradeFiles = async (files: File[]) => {
     // Combine and analyze the results
     return generateAnalysisData(combinedCurrentResults, previousTermResults);
   } catch (error) {
-    console.error('Error processing files:', error);
-    throw new Error(`Erreur lors du traitement des fichiers: ${error}`);
+    console.error('Error processing files:', error instanceof Error ? error.message : error);
+    throw new Error(`Erreur lors du traitement des fichiers: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
   }
 };
+
+/**
+ * Read file as text
+ */
+async function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Erreur de lecture du fichier'));
+    reader.readAsText(file);
+  });
+}
 
 /**
  * Process bulletin PDF files
@@ -225,7 +246,7 @@ function generateAnalysisData(
   // Extract relevant data from current term
   const currentTerm = currentTermData[0] || {
     students: [],
-    subjects: [],
+    subjects: ['MATHS', 'FRANC', 'HI-GE', 'AGL1', 'SVT'],
     termInfo: { term: 'Unknown', class: 'Unknown' }
   };
   
@@ -250,10 +271,15 @@ function generateAnalysisData(
   // Calculate current class average
   const classAverage = calculateClassAverage(currentTerm.students);
   
-  // Process subjects data
-  const subjects = currentTerm.subjects.map(subject => {
+  // Filter out non-subject columns and process subjects data
+  const validSubjects = currentTerm.subjects.filter(subject => 
+    !['MOY', 'MOYENNE', 'Rang', 'Né(e) le', 'Redoublant', 'Projet d\'accompagnement', 
+     'Etablissement précédent', 'Demi-journées d\'absence', 'Nb retards'].includes(subject)
+  );
+  
+  const subjects = validSubjects.map(subject => {
     const subjectData = {
-      name: subject,
+      name: cleanSubjectName(subject),
       current: calculateSubjectAverage(currentTerm.students, subject)
     };
     
@@ -290,7 +316,7 @@ function generateAnalysisData(
   // Calculate grade distribution with more precise categories
   const distribution = [
     { 
-      category: 'Très en difficulté', 
+      category: 'Très en difficulté',
       count: countStudentsInRange(currentTerm.students, 0, 4.99),
       color: '#ef4444',
       criteria: '0-4,99/20',
@@ -341,7 +367,7 @@ function generateAnalysisData(
   // Calculate categories counts with more precise ranges
   const categories = {
     veryStruggling: countStudentsInRange(currentTerm.students, 0, 4.99),
-    struggling: countStudentsInRange(currentTerm.students, 5, 9.99),
+    struggling: countStudentsInRange(currentTerm.students, 5, 9.99), 
     average: countStudentsInRange(currentTerm.students, 10, 12.99),
     good: countStudentsInRange(currentTerm.students, 13, 14.99),
     excellent: countStudentsInRange(currentTerm.students, 15, 20)
@@ -381,6 +407,29 @@ function generateAnalysisData(
     categories,
     analysisPoints
   };
+}
+
+/**
+ * Clean subject name to make it more readable
+ */
+function cleanSubjectName(subject: string): string {
+  // Map of common subject codes to full names
+  const subjectMap: Record<string, string> = {
+    'MATHS': 'Mathématiques',
+    'FRANC': 'Français',
+    'HI-GE': 'Histoire-Géographie',
+    'AGL1': 'Anglais LV1',
+    'ITALIE': 'Italien LV2/Bilangue',
+    'ITA2': 'Italien LV2/Bilangue',
+    'PH-CH': 'Physique-Chimie',
+    'SVT': 'SVT',
+    'TECHN': 'Technologie',
+    'EPS': 'EPS',
+    'EDMUS': 'Éducation Musicale',
+    'A-PLA': 'Arts Plastiques'
+  };
+  
+  return subjectMap[subject] || subject;
 }
 
 /**

@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import * as Papa from 'papaparse';
 import * as pdfjs from 'pdfjs-dist';
+import { extractGradesTable } from './pdfTableExtractor';
 import { toast } from 'sonner';
 
 export interface ParsedFileData {
@@ -556,6 +557,28 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
   try {
     console.log("Starting PDF parsing...");
+    
+    // First try to extract using the specialized grade table extractor
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const tableData = await extractGradesTable(arrayBuffer);
+      
+      if (tableData && tableData.students && tableData.students.length > 0) {
+        console.log("Successfully extracted table data using specialized extractor");
+        return {
+          students: tableData.students,
+          subjects: tableData.subjects,
+          termInfo: {
+            term: 'Trimestre actuel',
+            class: tableData.className || 'Classe non identifiée'
+          }
+        };
+      }
+    } catch (tableError) {
+      console.warn("Specialized table extractor failed, falling back to general PDF parser:", tableError);
+    }
+    
+    // If specialized extractor fails, fall back to the general PDF parser
     const arrayBuffer = await file.arrayBuffer();
     
     console.log("Loading PDF document...");
