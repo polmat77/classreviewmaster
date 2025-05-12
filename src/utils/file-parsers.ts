@@ -692,6 +692,7 @@ function parseFrenchBulletinPDF(
   let className = '';
   const classMatches = [
     /classe\s*:?\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9\s-]+?)(\s|$)/i,
+    /classe\s*:?\s*(.+?)(\s|\.|$)/i,
     /(\d+[A-Za-zÀ-ÖØ-öø-ÿ]{1,2}\s*\d*)/i
   ];
   
@@ -764,6 +765,7 @@ function parseFrenchBulletinPDF(
         
         const grade = parseFloat(match[1].replace(',', '.'));
         grades[subject] = !isNaN(grade) ? grade : null;
+        
         
         // Recherche de commentaires associés
         const commentPatterns = [
