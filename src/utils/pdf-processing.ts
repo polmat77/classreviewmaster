@@ -622,8 +622,82 @@ Appréciation globale de l'élève:`;
   }
 }
 
-export { parseClassBulletins }
-console.warn('parseClassBulletins is not implemented yet.');
-
+/**
+ * Parse class bulletins from a PDF file
+ * @param pdfBuffer The PDF file buffer
+ * @param onProgress Optional callback for progress updates
+ * @returns Structured bulletin data with students and class summary
+ */
+export async function parseClassBulletins(
+  pdfBuffer: ArrayBuffer,
+  onProgress?: (progress: number) => void
+): Promise<ClassBulletinResult> {
+  try {
+    // Implementation of class bulletin parsing
+    const result: ClassBulletinResult = {
+      students: [],
+      classSummary: ''
+    };
+    
+    // Extract text from PDF
+    const text = await extractTextFromPDF({ arrayBuffer: () => Promise.resolve(pdfBuffer) } as File, onProgress);
+    
+    if (!text) {
+      throw new Error("No text could be extracted from the PDF");
+    }
+    
+    // Split the text into individual bulletins
+    const bulletins = splitBulletins(text);
+    
+    // Process each bulletin
+    for (const bulletin of bulletins) {
+      // Extract student name
+      const nameMatch = bulletin.match(/Nom\s*:\s*([^\n]+)/);
+      const name = nameMatch ? nameMatch[1].trim() : "Unknown Student";
+      
+      // Extract class
+      const classMatch = bulletin.match(/Classe\s*:\s*([^\n]+)/);
+      const className = classMatch ? classMatch[1].trim() : "Unknown Class";
+      
+      // Extract subject feedback
+      const subjects: SubjectFeedback[] = [];
+      const subjectPattern = /([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s&\.]+)\s+(?:M\.|Mme\.?|M)\s+([A-ZÉÈÊÀÔÙÛÇa-zéèêàôùûç\s\-]+)\s+(\d+[,\.]\d+)?\s+([^A-ZÉÈÊÀÔÙÛÇ][^]*?)(?=(?:[A-ZÉÈÊÀÔÙÛÇ\s&\.]{5,}\s+(?:M\.|Mme\.?|M)\s+|$))/gi;
+      
+      let match;
+      while ((match = subjectPattern.exec(bulletin)) !== null) {
+        const subject = match[1].trim();
+        const teacher = match[2].trim();
+        const average = match[3] ? parseFloat(match[3].replace(',', '.')) : null;
+        const remark = match[4].trim();
+        
+        subjects.push({
+          subject,
+          teacher,
+          average,
+          remark
+        });
+      }
+      
+      // Extract class summary if present
+      const summaryMatch = bulletin.match(/Appréciation générale de la classe\s*:\s*([^]*?)(?=\n\n|\n[A-Z]|$)/i);
+      if (summaryMatch) {
+        result.classSummary = summaryMatch[1].trim();
+      }
+      
+      if (subjects.length > 0) {
+        result.students.push({
+          name,
+          class: className,
+          subjects
+        });
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Error parsing class bulletins:', error);
+    throw new Error(`Failed to parse class bulletins: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
 
 export { parseGradeTable }
