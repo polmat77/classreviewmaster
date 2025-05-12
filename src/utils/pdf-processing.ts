@@ -42,7 +42,7 @@ export interface ClassBulletinResult {
  * @param onProgress Optional callback for progress updates
  * @returns Structured table data with students, grades, and subjects
  */
-export async function parseGradeTable(
+async function parseGradeTable(
   pdfBuffer: ArrayBuffer, 
   onProgress?: (progress: number) => void
 ): Promise<GradeTableResult> {
@@ -622,4 +622,4 @@ Appréciation globale de l'élève:`;
   }
 }
 
-export { parseClassBulletins, parseGradeTable }
+export { parseClassBulletins }
