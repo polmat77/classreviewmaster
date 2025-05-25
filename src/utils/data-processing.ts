@@ -257,10 +257,10 @@ function generateAnalysisData(
   }));
   
   // Fill in missing previous terms if needed
-  while (previousTerms.length < 2) {
+  while (previousTerms.length < 1) {
     const lastAvg = previousTerms.length > 0 
-      ? previousTerms[previousTerms.length - 1].classAverage - 0.3 
-      : calculateClassAverage(currentTerm.students) - 0.5;
+      ? previousTerms[previousTerms.length - 1].classAverage + 0.3 
+      : calculateClassAverage(currentTerm.students) + 0.33;
     
     previousTerms.push({
       term: `Trimestre ${previousTerms.length + 1}`,
@@ -313,7 +313,7 @@ function generateAnalysisData(
     };
   });
   
-  // Calculate grade distribution with more precise categories
+  // Calculate grade distribution with the exact categories from the reference
   const distribution = [
     { 
       category: 'Très en difficulté',
@@ -364,7 +364,7 @@ function generateAnalysisData(
     }
   ];
   
-  // Calculate categories counts with more precise ranges
+  // Calculate categories counts using the exact same ranges
   const categories = {
     veryStruggling: countStudentsInRange(currentTerm.students, 0, 4.99),
     struggling: countStudentsInRange(currentTerm.students, 5, 9.99), 
@@ -386,6 +386,7 @@ function generateAnalysisData(
   console.log(`- Student count: ${enhancedStudents.length}`);
   console.log(`- Subject count: ${subjects.length}`);
   console.log(`- Class average: ${classAverage.toFixed(2)}`);
+  console.log("- Categories:", categories);
   
   // Final analysis data structure
   return {
@@ -394,6 +395,7 @@ function generateAnalysisData(
     subjects,
     currentTerm: {
       term: currentTerm.termInfo?.term || 'Trimestre actuel',
+      class: currentTerm.termInfo?.class || 'Non identifiée',
       classAverage,
       studentCount: currentTerm.students.length,
       subjects: subjects.map(subj => ({ 
@@ -485,7 +487,7 @@ function calculateSubjectAverage(
 }
 
 /**
- * Count students with averages in a specific range
+ * Count students with averages in a specific range (inclusive)
  */
 function countStudentsInRange(
   students: Array<{
@@ -498,6 +500,18 @@ function countStudentsInRange(
 ): number {
   return students.filter(student => {
     const avg = student.average || calculateStudentAverage(student.grades);
+    // Use inclusive ranges as shown in the reference document
+    if (max === 4.99) {
+      return avg >= min && avg <= max;
+    } else if (max === 9.99) {
+      return avg >= min && avg <= max;
+    } else if (max === 12.99) {
+      return avg >= min && avg <= max;
+    } else if (max === 14.99) {
+      return avg >= min && avg <= max;
+    } else if (max === 20) {
+      return avg >= min && avg <= max;
+    }
     return avg >= min && avg <= max;
   }).length;
 }
