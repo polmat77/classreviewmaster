@@ -23,10 +23,11 @@ export async function extractGradesTable(pdfBuffer: ArrayBuffer) {
       const viewport = page.getViewport({ scale: 1.0 });
       
       textContent.items.forEach((item) => {
-        if (item.str && item.str.trim()) {
+        // Type guard to check if item is TextItem
+        if ('str' in item && 'transform' in item && item.str && item.str.trim()) {
           // Use transform to get more accurate positions
-          const tx = item.transform[4];
-          const ty = viewport.height - item.transform[5]; // Adjust Y coordinate
+          const tx = item.transform[4] as number;
+          const ty = viewport.height - (item.transform[5] as number); // Adjust Y coordinate
           
           textItems.push({
             text: item.str.trim(),
@@ -48,7 +49,7 @@ export async function extractGradesTable(pdfBuffer: ArrayBuffer) {
   }
 }
 
-function processExtractedText(textItems) {
+function processExtractedText(textItems: any[]) {
   // Group text items into lines based on Y-coordinate proximity
   const lines = groupTextIntoLines(textItems);
   
@@ -74,7 +75,7 @@ function processExtractedText(textItems) {
     const studentName = row[0]?.text || `Élève ${index + 1}`;
     
     // Extract grades for each subject
-    const grades = {};
+    const grades: Record<string, number> = {};
     
     // Start from column 1 (skip name column)
     for (let i = 1; i < row.length; i++) {
@@ -96,7 +97,7 @@ function processExtractedText(textItems) {
     }
     
     // Calculate average
-    const validGrades = Object.values(grades).filter(g => !isNaN(g));
+    const validGrades = Object.values(grades).filter(g => typeof g === 'number' && !isNaN(g));
     const average = validGrades.length > 0 
       ? validGrades.reduce((sum, g) => sum + g, 0) / validGrades.length 
       : 0;
@@ -115,7 +116,7 @@ function processExtractedText(textItems) {
   };
 }
 
-function groupTextIntoLines(textItems) {
+function groupTextIntoLines(textItems: any[]) {
   // Sort by page and Y coordinate
   const sortedItems = [...textItems].sort((a, b) => {
     if (a.page !== b.page) return a.page - b.page;
@@ -155,13 +156,13 @@ function groupTextIntoLines(textItems) {
   return lines;
 }
 
-function findHeaderRow(lines) {
+function findHeaderRow(lines: any[]) {
   // Look for lines that might contain column headers
   // Common keywords in grade tables: Nom, Élève, Moyenne, Matière, etc.
   const headerKeywords = ['nom', 'élève', 'moyenne', 'matière', 'moy'];
   
   for (const line of lines) {
-    const lineText = line.map(item => item.text.toLowerCase()).join(' ');
+    const lineText = line.map((item: any) => item.text.toLowerCase()).join(' ');
     if (headerKeywords.some(keyword => lineText.includes(keyword))) {
       return line;
     }
@@ -169,7 +170,7 @@ function findHeaderRow(lines) {
   
   // If no obvious header found, try to find a line with "Moy" repeated
   for (const line of lines) {
-    const moyCount = line.filter(item => item.text === 'Moy' || item.text === 'MOY').length;
+    const moyCount = line.filter((item: any) => item.text === 'Moy' || item.text === 'MOY').length;
     if (moyCount >= 2) {
       return line;
     }
@@ -185,7 +186,7 @@ function findHeaderRow(lines) {
   return null;
 }
 
-function extractDataRows(lines, headerRow) {
+function extractDataRows(lines: any[], headerRow: any[]) {
   // Find the index of the header row
   const headerIndex = lines.findIndex(line => 
     line.length === headerRow.length && 
@@ -199,7 +200,7 @@ function extractDataRows(lines, headerRow) {
       if (line.length < 3) return false;
       
       // Check if at least one cell contains a number (grade)
-      const hasNumber = line.some(item => {
+      const hasNumber = line.some((item: any) => {
         const text = item.text.replace(',', '.');
         return !isNaN(parseFloat(text)) && parseFloat(text) <= 20;
       });
@@ -210,7 +211,7 @@ function extractDataRows(lines, headerRow) {
   
   // Return all rows after the header, excluding any that look like averages or totals
   return lines.slice(headerIndex + 1).filter(line => {
-    const lineText = line.map(item => item.text.toLowerCase()).join(' ');
+    const lineText = line.map((item: any) => item.text.toLowerCase()).join(' ');
     return !lineText.includes('moyenne de classe') && 
            !lineText.includes('total') && 
            !lineText.includes('moyenne des groupes') &&
@@ -218,7 +219,7 @@ function extractDataRows(lines, headerRow) {
   });
 }
 
-function extractClassName(textItems) {
+function extractClassName(textItems: any[]) {
   // Look for common class name patterns
   const classPatterns = [
     /classe\s*:?\s*(\d+[A-Za-z]*)/i,
