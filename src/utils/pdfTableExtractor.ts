@@ -1,4 +1,5 @@
 import * as pdfjs from 'pdfjs-dist';
+import { PDFJS_WORKER_URL } from './pdfjs-worker';
 
 export async function extractGradesTable(pdfBuffer: ArrayBuffer) {
   try {
@@ -6,7 +7,7 @@ export async function extractGradesTable(pdfBuffer: ArrayBuffer) {
     
     // Initialize PDF.js
     if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+      pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
     }
     
     // Load the PDF document

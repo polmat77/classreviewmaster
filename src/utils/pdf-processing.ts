@@ -1,7 +1,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import { toast } from 'sonner';
 import { OpenAIService } from './openai-service';
-import { extractTextFromPDF, validatePdfFile } from './pdf-service';
+import { extractTextFromPDF, validatePdfFile, initPdfJs } from './pdf-service';
 
 // Interfaces for structured output
 export interface StudentGrades {
@@ -65,12 +65,7 @@ async function parseGradeTable(
     }
     
     // Load PDF with pdfjs
-    // Make sure the worker is properly loaded
-    const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
-    
-    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-    }
+    initPdfJs();
     
     // Ajout d'un timeout pour éviter un blocage indéfini
     const timeoutPromise = new Promise<never>((_, reject) => {
