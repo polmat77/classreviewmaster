@@ -16,52 +16,44 @@ export function initPdfJs(forceReinit: boolean = false): void {
 /**
  * Validate if file is a PDF
  */
-export function validatePdfFile(file: File): Promise<{ isValid: boolean; reason: string }> {
-  return new Promise(async (resolve) => {
-    try {
-      // Initialize PDF.js if not already done
-      initPdfJs();
-      
-      // Basic file type check
-      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-        return resolve({ isValid: false, reason: "Le fichier n'est pas un PDF" });
-      }
-      
-      // Read first few bytes to verify PDF signature
-      const fileHeader = await readFileHeader(file);
-      if (!fileHeader.startsWith('%PDF')) {
-        return resolve({ isValid: false, reason: "Signature PDF invalide" });
-      }
-      
-      // Try to load the PDF with PDF.js for deeper validation
-      const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
-      
-      // Add timeout for slow PDFs
-      const timeoutPromise = new Promise<void>((_, reject) => {
-        setTimeout(() => reject(new Error("Timeout reading PDF")), 10000);
-      });
-      
-      try {
-        await Promise.race([loadingTask.promise, timeoutPromise]);
-        return resolve({ isValid: true, reason: "" });
-      } catch (error) {
-        console.warn(`PDF validation warning for ${file.name}:`, error);
-        // Still accept the file but with a warning
-        return resolve({ 
-          isValid: true, 
-          reason: "Le PDF pourrait être corrompu mais sera utilisé quand même" 
-        });
-      }
-    } catch (error) {
-      console.error(`Error validating ${file.name}:`, error);
-      // Accept the file with a warning
-      return resolve({ 
-        isValid: true, 
-        reason: "Validation impossible mais le fichier sera utilisé quand même" 
-      });
+export async function validatePdfFile(
+  file: File
+): Promise<{ isValid: boolean; reason: string }> {
+  try {
+    // Initialize PDF.js if not already done
+    initPdfJs();
+
+    // Basic file type check
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      return { isValid: false, reason: "Le fichier n'est pas un PDF" };
     }
-  });
+
+    // Read first few bytes to verify PDF signature
+    const fileHeader = await readFileHeader(file);
+    if (!fileHeader.startsWith('%PDF')) {
+      return { isValid: false, reason: 'Signature PDF invalide' };
+    }
+
+    // Try to load the PDF with PDF.js for deeper validation
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+
+    // Add timeout for slow PDFs
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error('Timeout reading PDF')), 10000);
+    });
+
+    await Promise.race([loadingTask.promise, timeoutPromise]);
+
+    return { isValid: true, reason: '' };
+  } catch (error) {
+    console.warn(`PDF validation warning for ${file.name}:`, error);
+    // Accept the file with a warning
+    return {
+      isValid: true,
+      reason: "Le PDF pourrait être corrompu mais sera utilisé quand même"
+    };
+  }
 }
 
 /**
