@@ -1,14 +1,12 @@
 import * as pdfjs from 'pdfjs-dist';
+import { initPdfJs } from './pdf-service';
 
 export async function extractGradesTable(pdfBuffer: ArrayBuffer) {
+  // Initialize PDF.js worker
+  initPdfJs();
+  
   try {
     console.log("Extracting grades table from PDF...");
-    
-    // Initialize PDF.js
-    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      // Use a stable version that exists on cdnjs
-      pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
-    }
     
     // Load the PDF document
     const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;

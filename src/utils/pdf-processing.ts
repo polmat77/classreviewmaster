@@ -2,6 +2,7 @@ import * as pdfjs from 'pdfjs-dist';
 import { toast } from 'sonner';
 import { OpenAIService } from './openai-service';
 import { extractTextFromPDF, validatePdfFile } from './pdf-service';
+import { initPdfJs } from './pdf-service';
 
 // Interfaces for structured output
 export interface StudentGrades {
@@ -46,6 +47,9 @@ async function parseGradeTable(
   pdfBuffer: ArrayBuffer, 
   onProgress?: (progress: number) => void
 ): Promise<GradeTableResult> {
+  // Initialize PDF.js worker
+  initPdfJs();
+  
   try {
     console.time("Grade Table Parsing");
     console.log("Parsing grade table PDF...");
@@ -62,15 +66,6 @@ async function parseGradeTable(
     
     if (onProgress) {
       onProgress(0); // Start progress at 0
-    }
-    
-    // Load PDF with pdfjs
-    // Make sure the worker is properly loaded
-    // Use the same version as the installed pdfjs-dist package
-    const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
-    
-    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
     }
     
     // Ajout d'un timeout pour éviter un blocage indéfini
@@ -530,6 +525,9 @@ export async function summarizeStudentBulletin(
   pdfBuffer: ArrayBuffer,
   onProgress?: (progress: number) => void
 ): Promise<string> {
+  // Initialize PDF.js worker
+  initPdfJs();
+  
   try {
     console.time("Student Bulletin Processing");
     console.log("Processing individual student bulletin...");
@@ -633,6 +631,9 @@ export async function parseClassBulletins(
   pdfBuffer: ArrayBuffer,
   onProgress?: (progress: number) => void
 ): Promise<ClassBulletinResult> {
+  // Initialize PDF.js worker
+  initPdfJs();
+  
   try {
     // Implementation of class bulletin parsing
     const result: ClassBulletinResult = {
