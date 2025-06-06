@@ -105,7 +105,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           // TODO : transformer 'table' en JSON et le passer à votre processStatistics(data)
         } catch (err) {
           console.warn(`Impossible d'extraire le tableau de ${file.name}`, err);
-          throw new Error("Erreur lors de l'extraction du tableau. Vérifiez le format de vos fichiers.");
+          toast.warning(
+            "Erreur lors de l'extraction du tableau. Le fichier sera traité sans ces informations."
+          );
         }
 
         try {
