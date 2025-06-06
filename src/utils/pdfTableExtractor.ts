@@ -6,8 +6,8 @@ export async function extractGradesTable(pdfBuffer: ArrayBuffer) {
     
     // Initialize PDF.js
     if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      // Match the worker version with the installed pdfjs-dist package
-      pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375/pdf.worker.min.js";
+      // Use a stable version that exists on cdnjs
+      pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
     }
     
     // Load the PDF document

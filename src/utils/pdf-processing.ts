@@ -67,7 +67,7 @@ async function parseGradeTable(
     // Load PDF with pdfjs
     // Make sure the worker is properly loaded
     // Use the same version as the installed pdfjs-dist package
-    const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375/pdf.worker.min.js";
+    const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
     
     if (!pdfjs.GlobalWorkerOptions.workerSrc) {
       pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
