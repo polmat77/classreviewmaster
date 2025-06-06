@@ -540,19 +540,10 @@ export const parseCsvFile = async (file: File): Promise<ParsedFileData> => {
   });
 };
 
-const PDFWorker = `
-  self.onmessage = function(event) {
-    const data = event.data;
-    if (data.type === 'process') {
-      self.postMessage({ type: 'processed', success: true });
-    }
-  };
-`;
-
-const blob = new Blob([PDFWorker], { type: 'application/javascript' });
-const workerUrl = URL.createObjectURL(blob);
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+// Use the official pdf.js worker from CDN. This avoids version mismatches and
+// ensures the worker has the correct implementation.
+pdfjs.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375/pdf.worker.min.js";
 
 export const parsePdfFile = async (file: File): Promise<ParsedFileData> => {
   try {
