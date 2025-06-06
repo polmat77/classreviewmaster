@@ -1,8 +1,8 @@
 import * as pdfjs from 'pdfjs-dist';
 
 // Set the worker source for PDF.js
-// Use the same version as the pdfjs-dist package to avoid worker/version mismatch
-const PDFJS_CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375";
+// Use a stable version that exists on cdnjs
+const PDFJS_CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379";
 
 /**
  * Initialize PDF.js worker
