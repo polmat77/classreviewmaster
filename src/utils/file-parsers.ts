@@ -1478,3 +1478,5 @@ export function parseMultiBulletins(text: string): BulletinData[] {
 export { parseBulletin, parseMultiBulletins }
 
 export { parseBulletin, parseMultiBulletins }
+
+export { parseBulletin, parseMultiBulletins }
