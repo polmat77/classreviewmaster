@@ -2,7 +2,7 @@ import * as pdfjs from 'pdfjs-dist';
 
 // Set the worker source for PDF.js
 // Use a stable version that exists on cdnjs
-const PDFJS_CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379";
+const PDFJS_CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375";
 
 /**
  * Initialize PDF.js worker
