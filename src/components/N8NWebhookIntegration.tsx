@@ -19,8 +19,16 @@ const N8NWebhookIntegration: React.FC<N8NWebhookIntegrationProps> = ({
   isConfigured,
   currentWebhookUrl
 }) => {
-  const [webhookUrl, setWebhookUrl] = useState(currentWebhookUrl || '');
+  const defaultWebhookUrl = 'https://polmat.app.n8n.cloud/webhook-test/upload-notes';
+  const [webhookUrl, setWebhookUrl] = useState(currentWebhookUrl || defaultWebhookUrl);
   const [isValidating, setIsValidating] = useState(false);
+
+  // Auto-configure with default URL on component mount
+  React.useEffect(() => {
+    if (!isConfigured && !currentWebhookUrl) {
+      onWebhookConfigured(defaultWebhookUrl);
+    }
+  }, []);
 
   const validateWebhookUrl = (url: string): boolean => {
     try {
@@ -74,7 +82,7 @@ const N8NWebhookIntegration: React.FC<N8NWebhookIntegrationProps> = ({
   };
 
   const handleRemoveWebhook = () => {
-    setWebhookUrl('');
+    setWebhookUrl(defaultWebhookUrl);
     onWebhookConfigured('');
     toast.info("Configuration du webhook supprimée");
   };
@@ -87,15 +95,18 @@ const N8NWebhookIntegration: React.FC<N8NWebhookIntegrationProps> = ({
           <span>Intégration N8N</span>
         </CardTitle>
         <CardDescription>
-          Configurez votre webhook N8N pour l'analyse automatisée des données PDF
+          Analysez vos données PDF avec le workflow N8N configuré
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {isConfigured ? (
+        {isConfigured || currentWebhookUrl ? (
           <Alert>
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
               Webhook N8N configuré et prêt à l'emploi
+              <div className="mt-2 text-sm text-muted-foreground">
+                URL: {currentWebhookUrl || defaultWebhookUrl}
+              </div>
               <div className="mt-2 flex space-x-2">
                 <Button
                   variant="outline"
@@ -124,8 +135,8 @@ const N8NWebhookIntegration: React.FC<N8NWebhookIntegrationProps> = ({
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Assurez-vous que votre workflow N8N est configuré pour recevoir des données JSON
-                et qu'il peut traiter les fichiers PDF encodés en base64.
+                L'URL par défaut de votre workflow N8N est déjà configurée. 
+                Vous pouvez modifier l'URL si nécessaire ou utiliser celle par défaut.
               </AlertDescription>
             </Alert>
             

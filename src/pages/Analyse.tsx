@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
@@ -28,8 +27,8 @@ const Analyse = () => {
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState<string>('');
-  const [useN8N, setUseN8N] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState<string>('https://polmat.app.n8n.cloud/webhook-test/upload-notes');
+  const [useN8N, setUseN8N] = useState(true); // Auto-enable N8N
   
   useEffect(() => {
     // Check if there are previous files to show appropriate analysis
