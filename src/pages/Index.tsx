@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
@@ -429,5 +430,3 @@ const Index = () => {
 };
 
 export default Index;
-
-</edits_to_apply>
