@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 
 export interface N8NAnalysisPayload {
@@ -45,28 +44,26 @@ export const sendToN8NWebhook = async (
   try {
     console.log(`Envoi de ${files.length} fichier(s) vers N8N...`);
 
-    // Créer un FormData pour envoyer les fichiers comme votre workflow l'attend
+    // Créer un FormData pour envoyer les fichiers
     const formData = new FormData();
     
-    // Ajouter chaque fichier au FormData
-    files.forEach((file, index) => {
-      formData.append(`file${index}`, file, file.name);
-    });
+    // Ajouter chaque fichier au FormData de manière plus sûre
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      console.log(`Ajout du fichier ${i}:`, file.name, file.type, file.size);
+      formData.append(`file${i}`, file);
+    }
 
-    // Créer les métadonnées comme un Blob
-    const metadataObj = {
+    // Créer les métadonnées comme une chaîne JSON simple
+    const metadataJson = JSON.stringify({
       timestamp: new Date().toISOString(),
       source: 'ClassReviewMaster',
       analysisType: 'grade_table_analysis',
       fileCount: files.length
-    };
-
-    // Convertir les métadonnées en Blob pour éviter l'erreur
-    const metadataBlob = new Blob([JSON.stringify(metadataObj)], {
-      type: 'application/json'
     });
-    
-    formData.append('metadata', metadataBlob, 'metadata.json');
+
+    // Ajouter les métadonnées comme une chaîne de texte simple
+    formData.append('metadata', metadataJson);
 
     console.log('Envoi vers le webhook N8N...');
 
