@@ -53,13 +53,20 @@ export const sendToN8NWebhook = async (
       formData.append(`file${index}`, file, file.name);
     });
 
-    // Ajouter les métadonnées
-    formData.append('metadata', JSON.stringify({
+    // Créer les métadonnées comme un Blob
+    const metadataObj = {
       timestamp: new Date().toISOString(),
       source: 'ClassReviewMaster',
       analysisType: 'grade_table_analysis',
       fileCount: files.length
-    }));
+    };
+
+    // Convertir les métadonnées en Blob pour éviter l'erreur
+    const metadataBlob = new Blob([JSON.stringify(metadataObj)], {
+      type: 'application/json'
+    });
+    
+    formData.append('metadata', metadataBlob, 'metadata.json');
 
     console.log('Envoi vers le webhook N8N...');
 
