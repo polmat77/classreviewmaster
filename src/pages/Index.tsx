@@ -3,10 +3,12 @@ import Layout from '@/components/Layout';
 import FileUploader from '@/components/FileUploader';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import ProgressIndicator from '@/components/ProgressIndicator';
+import N8NWebhookIntegration from '@/components/N8NWebhookIntegration';
 import { ChevronRight, Info, FileSpreadsheet, Upload, Table, Calendar, GraduationCap, BarChart2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { processGradeFiles, savePreviousGradeFiles, getPreviousGradeFiles } from '@/utils/data-processing';
+import { sendToN8NWebhook, convertN8NResponseToAnalysisData } from '@/utils/n8n-service';
 import { toast } from 'sonner';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
@@ -21,6 +23,9 @@ const Index = () => {
   const [savedPreviousFiles, setSavedPreviousFiles] = useState<any[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
+  const [webhookUrl, setWebhookUrl] = useState<string>('https://polmat.app.n8n.cloud/webhook-test/upload-notes');
+  const [useN8N, setUseN8N] = useState(true); // Auto-enable N8N
+  
   const analysisSteps = [
     "Chargement des fichiers...",
     "Extraction des données...",
@@ -59,8 +64,13 @@ const Index = () => {
       setSavedPreviousFiles(getPreviousGradeFiles());
     }
   };
+
+  const handleWebhookConfigured = (url: string) => {
+    setWebhookUrl(url);
+    setUseN8N(!!url);
+  };
   
-  const handleAnalyzeButtonClick = () => {
+  const handleAnalyzeButtonClick = async () => {
     if (currentGradeFiles.length === 0) {
       toast.error("Veuillez importer au moins un fichier de notes actuel");
       return;
@@ -70,7 +80,57 @@ const Index = () => {
       previousGradeFiles : 
       (savedPreviousFiles && savedPreviousFiles.length > 0 ? savedPreviousFiles : []);
     
-    processFiles(currentGradeFiles, previousFiles);
+    if (useN8N && webhookUrl) {
+      // Use N8N analysis
+      await processFilesWithN8N([...currentGradeFiles, ...previousFiles]);
+    } else {
+      // Use local analysis
+      await processFiles(currentGradeFiles, previousFiles);
+    }
+  };
+
+  const processFilesWithN8N = async (allFiles: File[]) => {
+    setIsLoading(true);
+    setShowResults(false);
+    setAnalysisStep(1);
+    
+    try {
+      console.log("Utilisation de l'analyse N8N...");
+      
+      // Simuler les étapes de progression
+      const simulateStep = async (step: number, delay: number) => {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setAnalysisStep(step);
+      };
+      
+      await simulateStep(1, 800);  // Chargement des fichiers
+      await simulateStep(2, 1000); // Extraction des données
+      
+      const n8nResponse = await sendToN8NWebhook(webhookUrl, allFiles);
+      
+      await simulateStep(3, 1200); // Analyse des résultats
+      
+      if (n8nResponse.success) {
+        const data = convertN8NResponseToAnalysisData(n8nResponse);
+        await simulateStep(4, 1000); // Génération des visualisations
+        await simulateStep(5, 500);  // Analyse terminée
+        
+        setProcessedData(data);
+        setHasUploaded(true);
+        setShowResults(true);
+        toast.success("Analyse N8N terminée avec succès");
+      } else {
+        throw new Error(n8nResponse.error || 'Erreur lors de l\'analyse N8N');
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'analyse N8N:", error);
+      toast.error("Erreur lors de l'analyse N8N. Basculement vers l'analyse locale...");
+      
+      // Fallback to local analysis
+      await processFiles(currentGradeFiles, previousGradeFiles);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const processFiles = async (current: File[], previous: File[]) => {
@@ -136,9 +196,9 @@ const Index = () => {
     <Layout>
       <div className="space-y-8">
         <div>
-          <h1 className="section-title">Chargement des moyennes</h1>
+          <h1 className="section-title">Analyse des résultats</h1>
           <p className="section-description">
-            Importez vos fichiers Excel, CSV ou PDF pour commencer l'analyse.
+            Importez vos fichiers Excel, CSV ou PDF pour commencer l'analyse des résultats de classe.
           </p>
           
           <div className="mt-4">
@@ -193,6 +253,12 @@ const Index = () => {
             </Accordion>
           </div>
         </div>
+        
+        <N8NWebhookIntegration
+          onWebhookConfigured={handleWebhookConfigured}
+          isConfigured={useN8N}
+          currentWebhookUrl={webhookUrl}
+        />
         
         <div className="glass-panel p-5 space-y-6">
           <div className="flex justify-between items-center mb-3">
@@ -254,7 +320,11 @@ const Index = () => {
               disabled={isLoading || currentGradeFiles.length === 0}
             >
               <BarChart2 className="mr-2 h-5 w-5" />
-              {isLoading ? 'Analyse en cours...' : 'Analyser les données'}
+              {isLoading ? (
+                useN8N ? 'Analyse N8N en cours...' : 'Analyse en cours...'
+              ) : (
+                useN8N ? 'Analyser avec N8N' : 'Analyser les données'
+              )}
             </Button>
           </div>
         </div>
@@ -359,3 +429,5 @@ const Index = () => {
 };
 
 export default Index;
+
+</edits_to_apply>

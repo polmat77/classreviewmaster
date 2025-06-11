@@ -95,7 +95,7 @@ const N8NWebhookIntegration: React.FC<N8NWebhookIntegrationProps> = ({
           <span>Intégration N8N</span>
         </CardTitle>
         <CardDescription>
-          Analysez vos données PDF avec le workflow N8N configuré
+          Analysez vos résultats de classe avec votre workflow N8N configuré
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -103,7 +103,7 @@ const N8NWebhookIntegration: React.FC<N8NWebhookIntegrationProps> = ({
           <Alert>
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
-              Webhook N8N configuré et prêt à l'emploi
+              Webhook N8N configuré et prêt pour l'analyse des résultats
               <div className="mt-2 text-sm text-muted-foreground">
                 URL: {currentWebhookUrl || defaultWebhookUrl}
               </div>
@@ -135,7 +135,7 @@ const N8NWebhookIntegration: React.FC<N8NWebhookIntegrationProps> = ({
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                L'URL par défaut de votre workflow N8N est déjà configurée. 
+                L'URL par défaut de votre workflow N8N est déjà configurée pour l'analyse des résultats. 
                 Vous pouvez modifier l'URL si nécessaire ou utiliser celle par défaut.
               </AlertDescription>
             </Alert>

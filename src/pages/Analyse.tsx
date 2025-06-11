@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import FileUploader from '@/components/FileUploader';
-import N8NWebhookIntegration from '@/components/N8NWebhookIntegration';
 import { 
   BarChart2, 
   TrendingUp, 
@@ -17,7 +16,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getPreviousGradeFiles, processGradeFiles } from '@/utils/data-processing';
-import { sendToN8NWebhook, convertN8NResponseToAnalysisData } from '@/utils/n8n-service';
 import { toast } from 'sonner';
 
 const Analyse = () => {
@@ -27,8 +25,6 @@ const Analyse = () => {
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState<string>('https://polmat.app.n8n.cloud/webhook-test/upload-notes');
-  const [useN8N, setUseN8N] = useState(true); // Auto-enable N8N
   
   useEffect(() => {
     // Check if there are previous files to show appropriate analysis
@@ -47,11 +43,6 @@ const Analyse = () => {
     setPreviousGradeFiles(files);
     setShowResults(false);
   };
-
-  const handleWebhookConfigured = (url: string) => {
-    setWebhookUrl(url);
-    setUseN8N(!!url);
-  };
   
   const handleStartAnalysis = async () => {
     if (currentGradeFiles.length === 0) {
@@ -63,29 +54,14 @@ const Analyse = () => {
     setShowResults(false);
     
     try {
-      let data;
-      
-      if (useN8N && webhookUrl) {
-        // Use N8N webhook for analysis
-        console.log("Utilisation de l'analyse N8N...");
-        const allFiles = [...currentGradeFiles, ...previousGradeFiles];
-        const n8nResponse = await sendToN8NWebhook(webhookUrl, allFiles);
-        
-        if (n8nResponse.success) {
-          data = convertN8NResponseToAnalysisData(n8nResponse);
-        } else {
-          throw new Error(n8nResponse.error || 'Erreur lors de l\'analyse N8N');
-        }
-      } else {
-        // Use local processing
-        console.log("Utilisation de l'analyse locale...");
-        data = await processGradeFiles([...currentGradeFiles, ...previousGradeFiles]);
-      }
+      // Use local processing only for subject analysis
+      console.log("Utilisation de l'analyse locale pour l'analyse par matière...");
+      const data = await processGradeFiles([...currentGradeFiles, ...previousGradeFiles]);
       
       // Set the analysis data
       setAnalysisData(data);
       setShowResults(true);
-      toast.success("Analyse des résultats terminée");
+      toast.success("Analyse par matière terminée");
     } catch (error) {
       console.error("Erreur lors de l'analyse:", error);
       toast.error("Erreur lors de l'analyse des données");
@@ -105,87 +81,74 @@ const Analyse = () => {
         </div>
         
         {!showResults && (
-          <>
-            <N8NWebhookIntegration
-              onWebhookConfigured={handleWebhookConfigured}
-              isConfigured={useN8N}
-              currentWebhookUrl={webhookUrl}
-            />
+          <div className="glass-panel p-5 space-y-6">
+            <h2 className="text-lg font-medium mb-3">Importation des tableaux de notes</h2>
             
-            <div className="glass-panel p-5 space-y-6">
-              <h2 className="text-lg font-medium mb-3">Importation des tableaux de notes</h2>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="h-5 w-5 text-primary" />
-                    <h3 className="text-base font-medium">Tableau de notes actuel</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Importez le tableau des moyennes de tous les élèves (format PDF, CSV ou Excel)
-                  </p>
-                  <FileUploader 
-                    onFilesAccepted={handleCurrentFilesAccepted}
-                    acceptedFileTypes={['.csv', '.xlsx', '.xls', '.pdf']}
-                    maxFiles={1}
-                    label="Importer le tableau des notes actuel"
-                    description="Glissez-déposez votre fichier PDF, CSV ou Excel"
-                  />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  <h3 className="text-base font-medium">Tableau de notes actuel</h3>
                 </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <Table className="h-5 w-5 text-primary" />
-                    <h3 className="text-base font-medium">Tableaux des trimestres précédents (optionnel)</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Importez les tableaux des trimestres précédents pour une analyse comparative
-                  </p>
-                  <FileUploader 
-                    onFilesAccepted={handlePreviousFilesAccepted}
-                    acceptedFileTypes={['.csv', '.xlsx', '.xls', '.pdf']}
-                    maxFiles={3}
-                    label="Importer les tableaux précédents"
-                    description="Fichiers PDF, CSV ou Excel des périodes antérieures"
-                  />
-                </div>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Importez le tableau des moyennes de tous les élèves (format PDF, CSV ou Excel)
+                </p>
+                <FileUploader 
+                  onFilesAccepted={handleCurrentFilesAccepted}
+                  acceptedFileTypes={['.csv', '.xlsx', '.xls', '.pdf']}
+                  maxFiles={1}
+                  label="Importer le tableau des notes actuel"
+                  description="Glissez-déposez votre fichier PDF, CSV ou Excel"
+                />
               </div>
               
-              <div className="flex justify-center mt-6">
-                <Button 
-                  onClick={handleStartAnalysis} 
-                  className="bg-primary hover:bg-primary/90 text-white py-3 px-6 rounded-lg shadow-lg transition-all transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
-                  size="lg"
-                  disabled={isAnalyzing || currentGradeFiles.length === 0}
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      {useN8N ? 'Analyse N8N en cours...' : 'Analyse en cours...'}
-                    </>
-                  ) : (
-                    <>
-                      <BarChart2 className="mr-2 h-5 w-5" />
-                      {useN8N ? 'Analyser avec N8N' : 'Commencer l\'analyse'}
-                    </>
-                  )}
-                </Button>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Table className="h-5 w-5 text-primary" />
+                  <h3 className="text-base font-medium">Tableaux des trimestres précédents (optionnel)</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Importez les tableaux des trimestres précédents pour une analyse comparative
+                </p>
+                <FileUploader 
+                  onFilesAccepted={handlePreviousFilesAccepted}
+                  acceptedFileTypes={['.csv', '.xlsx', '.xls', '.pdf']}
+                  maxFiles={3}
+                  label="Importer les tableaux précédents"
+                  description="Fichiers PDF, CSV ou Excel des périodes antérieures"
+                />
               </div>
             </div>
-          </>
+            
+            <div className="flex justify-center mt-6">
+              <Button 
+                onClick={handleStartAnalysis} 
+                className="bg-primary hover:bg-primary/90 text-white py-3 px-6 rounded-lg shadow-lg transition-all transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+                size="lg"
+                disabled={isAnalyzing || currentGradeFiles.length === 0}
+              >
+                {isAnalyzing ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Analyse en cours...
+                  </>
+                ) : (
+                  <>
+                    <BarChart2 className="mr-2 h-5 w-5" />
+                    Commencer l'analyse
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         )}
         
         {isAnalyzing && (
           <div className="glass-panel p-5 flex flex-col items-center justify-center py-12 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-            <h3 className="text-lg font-medium mb-2">
-              {useN8N ? 'Analyse N8N en cours...' : 'Analyse en cours...'}
-            </h3>
+            <h3 className="text-lg font-medium mb-2">Analyse en cours...</h3>
             <p className="text-sm text-muted-foreground max-w-md">
-              {useN8N 
-                ? 'Envoi des données vers N8N et traitement en cours. Veuillez patienter...'
-                : 'Nous analysons vos données. Veuillez patienter un instant.'
-              }
+              Nous analysons vos données par matière. Veuillez patienter un instant.
             </p>
           </div>
         )}
